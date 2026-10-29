@@ -15,6 +15,10 @@ const nowStamp = () => new Date().toLocaleString('en-GB', { day: '2-digit', mont
 const classOrder = c => { const i = DB.masters.classes.indexOf(c); return i < 0 ? 99 : i; };
 const nextClassOf = c => { const i = DB.masters.classes.indexOf(c); return i >= 0 && i < DB.masters.classes.length - 1 ? DB.masters.classes[i + 1] : c; };
 const activeSchoolSession = () => DB.sessions.find(s => s.current) || DB.sessions[0];
+const roleCan = perm => {
+  const r = DB.roles.find(x => x.key === (state.user ? state.user.role : ''));
+  return !!(r && r.perms.includes(perm));
+};
 const filterList = (list, q, keys) => { const t = q.trim().toLowerCase(); return !t ? list : list.filter(x => keys.some(k => String(x[k] || '').toLowerCase().includes(t))); };
 const pill = (text, type = 'grey') => `<span class="pill ${type}">${esc(text)}</span>`;
 const statusPill = s => pill(s, { Active: 'green', 'TC Taken': 'amber', 'Drop Out': 'red', Selection: 'green', 'Form Filled': 'blue', 'Payment Made': 'violet', 'Called for Interaction': 'amber', 'Not Selected': 'red', Paid: 'green', Pending: 'amber', Archived: 'grey', Current: 'green', Upcoming: 'blue' }[s] || 'grey');
@@ -80,22 +84,80 @@ const ROLES = {
 const ROLE_KEYS = Object.keys(ROLES);
 
 const NAV = {
-  teacher: [{ section: 'Teaching', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'classes', label: 'My Classes', icon: 'book' }, { v: 'students', label: 'My Students', icon: 'users' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  class_teacher: [{ section: 'My Class', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'classes', label: 'My Class', icon: 'book' }, { v: 'students', label: 'Student List', icon: 'users' }, { v: 'verification', label: 'Verification Sheet', icon: 'checks' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  office: [{ section: 'Front Office', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'admissions', label: 'Admissions', icon: 'layers' }, { v: 'students', label: 'Student Records', icon: 'users' }, { v: 'documents', label: 'Document Access', icon: 'folder' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  staff: [{ section: 'Workspace', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  principal: [{ section: 'School Overview', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'students', label: 'Student Directory', icon: 'users' }, { v: 'reports', label: 'Class Strength', icon: 'chart' }, { v: 'verification', label: 'Verification', icon: 'checks' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  manager: [{ section: 'Management', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'reports', label: 'Summary Reports', icon: 'chart' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  parent: [{ section: 'My Family', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'student-detail', id: 'st1', label: 'Child Profile', icon: 'id' }, { v: 'documents', label: 'Documents', icon: 'folder' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }],
-  student: [{ section: 'My School', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'student-detail', id: 'st1', label: 'My Profile', icon: 'id' }, { v: 'notices', label: 'Notices', icon: 'bell' }] }],
-  admin: [
-    { section: 'Overview', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }] },
-    { section: 'Student Management', items: [{ v: 'students', label: 'Student Master', icon: 'users' }, { v: 'admissions', label: 'Admissions', icon: 'layers' }, { v: 'promotion', label: 'Student Promotion', icon: 'trend' }, { v: 'sessions', label: 'Academic Sessions', icon: 'calendar' }, { v: 'classes', label: 'Classes & Sections', icon: 'book' }] },
-    { section: 'Reports & Records', items: [{ v: 'reports', label: 'Reports & MIS', icon: 'chart' }, { v: 'verification', label: 'Verification Sheet', icon: 'checks' }, { v: 'photos', label: 'Photographs', icon: 'image' }, { v: 'documents', label: 'Documents', icon: 'folder' }] },
-    { section: 'Administration', items: [{ v: 'masters', label: 'Masters', icon: 'layers' }, { v: 'users', label: 'Users & Roles', icon: 'shield' }, { v: 'school', label: 'School Information', icon: 'school' }, { v: 'modules', label: 'Module Configuration', icon: 'settings' }, { v: 'notices', label: 'Notices', icon: 'bell' }, { v: 'audit', label: 'Audit Trail', icon: 'clock' }] }
-  ],
-  super: [{ section: 'Multi-school', items: [{ v: 'dashboard', label: 'Dashboard', icon: 'grid' }, { v: 'schools', label: 'Schools', icon: 'building' }, { v: 'admins', label: 'School Admins', icon: 'shield' }, { v: 'modules', label: 'Module Configuration', icon: 'settings' }, { v: 'audit', label: 'Audit Trail', icon: 'clock' }, { v: 'profile', label: 'My Profile', icon: 'user' }] }]
+  teacher: [{ section: 'Teaching', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'My Students', icon: 'users' },
+    { v: 'reports', label: 'Reports', icon: 'chart' }
+  ] }],
+  class_teacher: [{ section: 'My Class', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'My Class', icon: 'users' },
+    { v: 'reports', label: 'Reports & Verification', icon: 'checks' }
+  ] }],
+  office: [{ section: 'Front Office', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'Students', icon: 'users' },
+    { v: 'admission-docs', label: 'Admissions & Documents', icon: 'folder' }
+  ] }],
+  staff: [{ section: 'Workspace', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' }
+  ] }],
+  principal: [{ section: 'School Overview', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'Students', icon: 'users' },
+    { v: 'reports', label: 'Reports', icon: 'chart' }
+  ] }],
+  manager: [{ section: 'Management', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'reports', label: 'Reports', icon: 'chart' }
+  ] }],
+  parent: [{ section: 'My Family', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'My Child', icon: 'id' }
+  ] }],
+  student: [{ section: 'My School', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'My Profile', icon: 'id' }
+  ] }],
+  admin: [{ section: 'School Management', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'students', label: 'Students', icon: 'users' },
+    { v: 'admission-docs', label: 'Admissions & Documents', icon: 'folder' },
+    { v: 'reports', label: 'Reports', icon: 'chart' },
+    { v: 'administration', label: 'Administration', icon: 'settings' }
+  ] }],
+  super: [{ section: 'Multi-school', items: [
+    { v: 'dashboard', label: 'Dashboard', icon: 'grid' },
+    { v: 'school-management', label: 'School Management', icon: 'building' }
+  ] }]
 };
+
+const ROUTE_ALIASES = {
+  classes: { view: 'students', tab: 'classes' },
+  'student-detail': { view: 'students', tab: 'profile' },
+  'student-form': { view: 'students', tab: 'form' },
+  promotion: { view: 'students', tab: 'promotion' },
+  admissions: { view: 'admission-docs', tab: 'admissions' },
+  documents: { view: 'admission-docs', tab: 'documents' },
+  verification: { view: 'reports', tab: 'verification' },
+  photos: { view: 'reports', tab: 'photos' },
+  masters: { view: 'administration', tab: 'masters' },
+  sessions: { view: 'administration', tab: 'sessions' },
+  school: { view: 'administration', tab: 'school' },
+  users: { view: 'administration', tab: 'users' },
+  modules: { view: 'administration', tab: 'modules' },
+  notices: { view: 'dashboard', tab: 'notices' },
+  schools: { view: 'school-management', tab: 'schools' },
+  admins: { view: 'school-management', tab: 'admins' }
+};
+function resolveRoute(view, params) {
+  const role = state.user ? state.user.role : '';
+  if (view === 'modules' && role === 'super') return { view: 'school-management', params: Object.assign({}, params, { tab: 'modules' }) };
+  if (view === 'audit' && role === 'super') return { view: 'school-management', params: Object.assign({}, params, { tab: 'audit' }) };
+  const alias = ROUTE_ALIASES[view];
+  if (!alias) return { view, params };
+  return { view: alias.view, params: Object.assign({}, params, { tab: alias.tab }) };
+}
 
 /* ============================= fictional data ============================= */
 const MASTER_DEFS = [
@@ -175,6 +237,7 @@ const DB = {
 };
 DB.masters = Object.fromEntries(MASTER_DEFS.map(m => [m.key, [...m.items]]));
 DB.school = DB.schools[0];
+DB.school.idLabel = DB.school.idLabel || 'Student ID';
 
 const CLASS_TEACHERS = {
   'Class 3|A': 'Sunita Rao', 'Class 4|A': 'Rohan Mehta', 'Class 5|A': 'Rohan Mehta',
@@ -278,11 +341,17 @@ DB.users = [
   { id: 'u12', name: 'Farah Khan', username: 'farah.khan', mobile: '9810000016', role: 'class_teacher', status: 'Active', last: '27 Oct 2026, 15:44' }
 ];
 
-DB.roles = [
-  { id: 'r1', name: 'School Admin', desc: 'Full school configuration, students and audit.', perms: ['View', 'Edit', 'Archive', 'Delete'], builtin: true },
-  { id: 'r2', name: 'Principal', desc: 'School-wide read access and reports.', perms: ['View'], builtin: true },
-  { id: 'r3', name: 'Class Teacher', desc: 'Assigned class, student verification and lists.', perms: ['View', 'Edit'], builtin: true },
-  { id: 'r4', name: 'Office Operator', desc: 'Front office admissions and document access.', perms: ['View', 'Edit'], builtin: false }
+const DEFAULT_ROLE_PERMS = {
+  admin: ['View', 'Edit', 'Archive', 'Delete'], super: ['View', 'Edit', 'Archive', 'Delete'],
+  principal: ['View'], manager: ['View'], teacher: ['View'], class_teacher: ['View', 'Edit'],
+  office: ['View', 'Edit'], staff: ['View'], parent: ['View'], student: ['View']
+};
+DB.roles = ROLE_KEYS.map((key, i) => ({
+  id: 'r' + (i + 1), key, name: ROLES[key].label, desc: ROLES[key].desc,
+  perms: (DEFAULT_ROLE_PERMS[key] || ['View']).slice(), builtin: true
+}));
+DB.reportTemplates = [
+  { id: 'tpl1', name: 'Core Student List', cols: ['regNo', 'name', 'className', 'section', 'rollNo', 'mobile'], cls: '', sec: '' }
 ];
 
 /* ============================= application state ============================= */
@@ -300,7 +369,8 @@ const state = {
   schoolForm: null, adminForm: false,
   moduleSchool: 'sch1',
   promoSrc: 'Class 5', promoSection: 'A', promoTarget: 'Class 6', promoTargetSession: '2027-28',
-  loginRole: '', loginStep: 1, formPhoto: null
+  loginRole: '', loginStep: 1, formPhoto: null,
+  detailTab: 'personal', formTab: 'personal', docFile: null
 };
 const PAGE_EXTRA = { 'student-detail': 'Student Profile', 'student-form': 'Student Form' };
 let toastTimer = null, pendingConfirm = null;
@@ -420,21 +490,46 @@ function navItems() { return NAV[state.user.role].flatMap(g => g.items); }
 function canView(v) {
   const items = navItems();
   if (items.some(i => i.v === v)) return true;
-  if (v === 'student-detail') return items.some(i => i.v === 'students');
-  if (v === 'student-form') return ['admin', 'office'].includes(state.user.role);
+  if (v === 'profile') return true;
+  if (v === 'admission-docs' && state.user.role === 'parent') return true;
   return false;
 }
 function pageTitle() {
-  if (state.view === 'student-form') return state.params.id ? 'Edit Student' : 'Add Student';
+  if (state.view === 'dashboard') return state.params.tab === 'notices' ? 'Notices' : 'Dashboard';
+  if (state.view === 'students') {
+    const role = state.user.role;
+    const tab = state.params.tab || (['parent', 'student'].includes(role) ? 'profile' : 'list');
+    if (tab === 'profile') return role === 'parent' ? 'My Child' : role === 'student' ? 'My Profile' : 'Student Profile';
+    if (tab === 'form') return state.params.id ? 'Edit Student' : 'Add Student';
+    if (tab === 'promotion') return 'Student Promotion';
+    if (tab === 'classes') return role === 'teacher' ? 'My Classes' : role === 'class_teacher' ? 'My Class' : 'Classes & Sections';
+    return role === 'teacher' ? 'My Students' : role === 'class_teacher' ? 'My Class' : 'Students';
+  }
+  if (state.view === 'admission-docs') return state.params.tab === 'documents' ? 'Documents' : 'Admissions & Documents';
+  if (state.view === 'reports') {
+    const label = { verification: 'Verification Sheet', photos: 'Photo Sheets' }[state.params.tab];
+    return label || (state.user.role === 'manager' ? 'Summary Reports' : 'Reports');
+  }
+  if (state.view === 'administration') return 'Administration';
+  if (state.view === 'school-management') return 'School Management';
+  if (state.view === 'profile') return 'My Profile';
   const item = navItems().find(i => i.v === state.view);
   return item ? item.label : (PAGE_EXTRA[state.view] || 'Dashboard');
 }
 function go(view, params = {}) {
   if (!state.user) return;
+  const resolved = resolveRoute(view, params || {});
+  view = resolved.view;
+  params = resolved.params || {};
   if (!VIEWS[view] || !canView(view)) { toast('Not available', 'This screen is outside your demo role scope.', 'error'); return; }
-  if (state.view !== view) state.page = 1;
+  const sameView = state.view === view;
+  if (!sameView) state.page = 1;
+  if (view === 'students' && params.tab === 'form') {
+    state.formPhoto = params.id ? (byId(params.id)?.photo || null) : null;
+    if (!sameView || state.params.id !== params.id) state.formTab = 'personal';
+  }
+  if (view === 'students' && params.tab === 'profile' && (!sameView || state.params.id !== params.id)) state.detailTab = 'personal';
   state.view = view; state.params = params || {};
-  if (view === 'student-form') state.formPhoto = params.id ? (byId(params.id)?.photo || null) : null;
   render();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -473,7 +568,7 @@ function heroCard(title, text, actions = [], meta = '') {
   return `<div class="hero-card"><h2>${esc(title)}</h2><p>${esc(text)}</p>${actions.length ? `<div class="row"><button class="btn btn-primary" data-act="nav" data-view="${actions[0].v}"${actions[0].id ? ` data-id="${actions[0].id}"` : ''}>${esc(actions[0].label)}</button>${actions.slice(1).map(a => `<button class="btn btn-outline" data-act="nav" data-view="${a.v}"${a.id ? ` data-id="${a.id}"` : ''}>${esc(a.label)}</button>`).join('')}</div>` : ''}${meta}</div>`;
 }
 function quickActions(items) {
-  return `<div class="quick-grid">${items.map(a => `<button class="quick-action" data-act="nav" data-view="${a.v}"${a.id ? ` data-id="${a.id}"` : ''}><span class="qi">${ic(a.icon || 'arrow')}</span><span>${esc(a.label)}</span><small>${esc(a.sub || '')}</small></button>`).join('')}</div>`;
+  return `<div class="quick-grid">${items.map(a => `<button class="quick-action" data-act="nav" data-view="${a.v}"${a.id ? ` data-id="${a.id}"` : ''}${a.tab ? ` data-tab="${a.tab}"` : ''}><span class="qi">${ic(a.icon || 'arrow')}</span><span>${esc(a.label)}</span><small>${esc(a.sub || '')}</small></button>`).join('')}</div>`;
 }
 function acc(title, sub, body, open = false, iconName = 'id') {
   return `<details class="acc"${open ? ' open' : ''}><summary><span class="acc-ico">${ic(iconName, 'sm')}</span><span class="st"><b>${esc(title)}</b><small>${esc(sub)}</small></span><span class="chev">▾</span></summary><div class="acc-body">${body}</div></details>`;
@@ -542,7 +637,7 @@ function pipeline(list) {
 function auditMini(limit = 5) {
   return `<div class="timeline">${DB.audit.slice(0, limit).map(a => `<div class="tl-item on"><b>${esc(a.action)}</b><small>${esc(a.user)} &middot; ${esc(a.module)}</small><p>${esc(a.detail)}</p></div>`).join('')}</div>`;
 }
-function dashboardView() {
+function legacyDashboardView() {
   const role = state.user.role;
   const list = visibleStudents();
   const active = list.filter(s => s.studentStatus === 'Active').length;
@@ -629,7 +724,7 @@ function classesView() {
   } else {
     const teacherAllowed = ['principal'].includes(role);
     body = `<div class="grid g4">${kpi('Class Groups', rows.length, 'book', '', 'With active students')}${kpi('Total Strength', rows.reduce((n, r) => n + r.total, 0), 'users', 'blue', 'Current session')}${kpi('Largest Group', Math.max(...rows.map(r => r.total)), 'chart', 'green', 'Students')}${kpi('Avg. Class Size', Math.round(rows.reduce((n, r) => n + r.total, 0) / Math.max(1, rows.length)), 'trend', 'amber', 'Students per group')}</div>`
-      + `<div class="grid g-2-1 mt"><div class="stack">${sectionCard('Class / Section Strength', 'Live counts from Student Master', `<div class="card-pad">${strengthBars(rows)}</div>`)}${sectionCard('Class & Section Directory', 'Strength, class teacher and roll-up', `<div class="table-wrap"><table class="data"><thead><tr><th>Class</th><th>Section</th><th>Class Teacher</th><th>Students</th><th>Boys</th><th>Girls</th><th>Active</th><th></th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${esc(r.cls)}</b></td><td>${esc(r.sec)}</td><td>${esc(CLASS_TEACHERS[r.cls + '|' + r.sec] || 'Not assigned')}</td><td>${r.total}</td><td>${r.boys}</td><td>${r.girls}</td><td>${r.active}</td><td class="right"><button class="link-btn" data-act="class-list" data-cls="${r.cls}" data-sec="${r.sec}">View list</button></td></tr>`).join('')}</tbody></table></div>`, `<button class="link-btn" data-act="nav" data-view="reports">Full report</button>`)}</div><div class="stack">${sectionCard('Session Summary', 'Current academic session', `<div class="card-pad"><div class="profile-rows"><div><span>Session</span><b>${esc(activeSchoolSession().name)}</b></div><div><span>Class groups</span><b>${rows.length}</b></div><div><span>Class teachers</span><b>${rows.filter(r => CLASS_TEACHERS[r.cls + '|' + r.sec]).length}</b></div><div><span>Unassigned groups</span><b>${rows.filter(r => !CLASS_TEACHERS[r.cls + '|' + r.sec]).length}</b></div></div><p class="report-note mt-s">Class teachers are fictional demo assignments. Section grouping and sub-sections follow the shared masters.</p></div>`)}${sectionCard('Quick Actions', '', `<div class="card-pad">${quickActions([{ label: 'Students', sub: 'Master list', v: 'students', icon: 'users' }, { label: 'Verification', sub: 'Class sheets', v: 'verification', icon: 'checks' }, { label: 'Promotion', sub: 'Next session', v: 'promotion', icon: 'trend' }, { label: 'Reports', sub: 'Strength / UDISE', v: 'reports', icon: 'chart' }])}</div>`)}</div></div>`;
+      + `<div class="grid g-2-1 mt"><div class="stack">${sectionCard('Class / Section Strength', 'Live counts from Student Master', `<div class="card-pad">${strengthBars(rows)}</div>`)}${sectionCard('Class & Section Directory', 'Strength, class teacher and roll-up', `<div class="table-wrap"><table class="data"><thead><tr><th>Class</th><th>Section</th><th>Class Teacher</th><th>Students</th><th>Boys</th><th>Girls</th><th>Active</th><th></th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${esc(r.cls)}</b></td><td>${esc(r.sec)}</td><td>${esc(CLASS_TEACHERS[r.cls + '|' + r.sec] || 'Not assigned')}</td><td>${r.total}</td><td>${r.boys}</td><td>${r.girls}</td><td>${r.active}</td><td class="right"><button class="link-btn" data-act="class-list" data-cls="${r.cls}" data-sec="${r.sec}">View list</button></td></tr>`).join('')}</tbody></table></div>`, `<button class="link-btn" data-act="nav" data-view="reports">Full report</button>`)}</div><div class="stack">${sectionCard('Session Summary', 'Current academic session', `<div class="card-pad"><div class="profile-rows"><div><span>Session</span><b>${esc(activeSchoolSession().name)}</b></div><div><span>Class groups</span><b>${rows.length}</b></div><div><span>Class teachers</span><b>${rows.filter(r => CLASS_TEACHERS[r.cls + '|' + r.sec]).length}</b></div><div><span>Unassigned groups</span><b>${rows.filter(r => !CLASS_TEACHERS[r.cls + '|' + r.sec]).length}</b></div></div><p class="report-note mt-s">Class teachers are fictional demo assignments. Section grouping and sub-sections follow the shared masters.</p></div>`)}${sectionCard('Quick Actions', '', `<div class="card-pad">${quickActions([{ label: 'Students', sub: 'Master list', v: 'students', icon: 'users' }, { label: 'Verification', sub: 'Class sheets', v: 'verification', icon: 'checks' }].concat(role === 'admin' ? [{ label: 'Promotion', sub: 'Next session', v: 'promotion', icon: 'trend' }] : []).concat([{ label: 'Reports', sub: 'Strength / UDISE', v: 'reports', icon: 'chart' }]))}</div>`)}</div></div>`;
   }
   return pageHead(role === 'class_teacher' ? 'My Class' : role === 'teacher' ? 'My Classes' : 'Classes & Sections', 'Class and section strength generated from the shared Student Master.', actions) + body;
 }
@@ -661,7 +756,7 @@ function studentsView() {
         <button class="btn btn-primary btn-sm" type="submit">${ic('search', 'sm')} Apply</button>
         <button class="btn btn-ghost btn-sm" type="button" data-act="reset-stu">Reset</button>
       </form>
-      <div class="table-wrap"><table class="data"><thead><tr><th><input class="checkbox" type="checkbox" aria-label="Select all" disabled title="Bulk actions are not enabled in this demo"></th><th>Student</th><th>${esc(idLabel)}</th><th>Class / Section</th><th>Father</th><th>Mobile</th><th>Status</th><th>Admission</th><th></th></tr></thead><tbody>
+      <div class="table-wrap"><table class="data"><thead><tr><th><input class="checkbox" type="checkbox" aria-label="Select all" disabled title="Bulk actions are not enabled in this demo"></th><th>Student</th><th>Admission No.</th><th>Class / Section</th><th>Father</th><th>Mobile</th><th>Status</th><th>Admission</th><th></th></tr></thead><tbody>
       ${slice.map(s => `<tr><td><input class="checkbox" type="checkbox" aria-label="Select ${esc(s.name)}" disabled></td><td>${studentLink(s)}${s.archived ? ' ' + pill('Archived', 'grey') : ''}</td><td>${esc(s.admNo)}</td><td><b>${esc(s.className)}</b> <span class="muted">/ ${esc(s.section)}</span></td><td>${esc(s.fatherName)}</td><td>${esc(s.mobile)}</td><td>${statusPill(s.studentStatus)}</td><td>${statusPill(s.admissionStatus)}</td><td class="right row-actions"><button class="btn-icon icon-btn" title="View" data-act="view-student" data-id="${s.id}">${ic('arrow', 'sm')}</button>${canEdit ? `<button class="btn-icon icon-btn" title="Edit" data-act="edit-student" data-id="${s.id}">${ic('edit', 'sm')}</button><button class="btn-icon icon-btn" title="${s.archived ? 'Restore' : 'Archive'}" data-act="${s.archived ? 'restore-student' : 'archive-student'}" data-id="${s.id}">${ic(s.archived ? 'check' : 'archive', 'sm')}</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="9">${emptyBox('No students match these filters', 'Adjust the search or filters and try again.')}</td></tr>`}
       </tbody></table></div>
       ${pager(rows.length)}
@@ -690,7 +785,7 @@ function studentDetailView(params) {
   const prev = s.prevSchoolName ? `<div class="kv">${kv('Previous School', s.prevSchoolName)}${kv('Address', s.prevSchoolAddress)}${kv('Board', s.prevSchoolBoard)}${kv('Last Exam %', s.prevSchoolPercentage ? s.prevSchoolPercentage + '%' : '')}${kv('TC Number', s.prevTcNo)}</div>` : `<p class="report-note">No previous school recorded.</p>`;
   const udise = `<div class="kv">${kv('PEN No.', s.penNo)}${kv('APAAR ID', s.apaarId)}${kv('Form No.', s.formNo)}${kv('Country', s.country)}${kv('Caste', s.caste)}${kv('Minority', s.minority)}${kv('BPL', s.bpl)}${kv('RTE', s.rte)}${kv('Disability', s.disability)}${kv('Transport', s.transport)}${kv('Admission Status', s.admissionStatus)}${kv('Remarks', s.remarks || '—')}</div>`;
   const enroll = `<div class="table-wrap"><table class="data"><thead><tr><th>Session</th><th>Class</th><th>Section</th><th>Roll No.</th><th>Result</th></tr></thead><tbody>${(s.enrollments || []).slice().reverse().map(e => `<tr><td><b>${esc(e.session)}</b>${e.session === activeSchoolSession().name ? ' ' + pill('Current', 'green') : ''}</td><td>${esc(e.class)}</td><td>${esc(e.section)}</td><td>${esc(e.roll)}</td><td>${pill(e.result || 'Studying', e.result === 'Promoted' ? 'blue' : 'green')}</td></tr>`).join('')}</tbody></table></div><p class="report-note mt-s">Year-wise class details are preserved when a student is promoted. History is never deleted by the demo promotion action.</p>`;
-  const history = s.history.length ? `<div class="timeline">${s.history.map(h => `<div class="tl-item on"><b>${esc(h.changes)}</b><small>${esc(h.date)} &middot; ${esc(h.by)}</small><p>Prior values retained in the demo history snapshot.</p></div>`).join('')}</div>` : `<p class="report-note">No edits recorded for this student yet. Editing personal details preserves a before-change snapshot here.</p>`;
+  const history = s.history.length ? `<div class="timeline">${s.history.map(h => `<div class="tl-item on"><b>${esc(h.changes)}</b><small>${esc(h.date)} &middot; ${esc(h.by)}</small>${(h.fields || []).length ? `<div class="history-grid">${h.fields.map(f => `<div><span>${esc(f.field)}</span><small>${esc(f.before || '—')} → <b>${esc(f.after || '—')}</b></small></div>`).join('')}</div>` : '<p>Prior values retained in the demo history snapshot.</p>'}</div>`).join('')}</div>` : `<p class="report-note">No edits recorded for this student yet. Editing personal, address or contact details preserves a before/after snapshot here.</p>`;
   const docList = `<div class="list">${docs.map(d => `<div class="list-item"><span class="doc-type">${esc((d.type || 'DOC').slice(0, 3))}</span><div><b>${esc(d.name)}</b><small>${esc(d.type)} &middot; ${esc(d.date)} &middot; ${esc(d.size)}</small></div><div class="r"><button class="link-btn" data-act="doc-dl" data-id="${d.id}">Download</button></div></div>`).join('') || `<p class="report-note">No admission documents linked. The School Office and Admin can add these in the Document Repository.</p>`}</div>`;
   return printHead('Student Profile · ' + s.name)
     + pageHead('Student Profile', `${s.regNo} · detailed view of personal, academic, family and UDISE information.`, '')
@@ -733,8 +828,8 @@ function studentFormView(params) {
     ${select('house', 'House', DB.masters.houses)}
     ${select('siblings', 'Any Siblings?', ['No', 'Yes'])}
     ${input('siblingDetails', 'Sibling Details', 'text', 'placeholder="Name / class / ID"')}
-    ${input('regNo', DB.school.idLabel + ' / Reg No.', 'text', 'placeholder="Auto-generated if blank"')}
-    ${input('admNo', 'Admission No.', 'text', 'placeholder="Auto-generated if blank"')}
+    ${input('regNo', DB.school.idLabel + ' / Registration No.', 'text', 'placeholder="Auto-generated if blank"')}
+    ${input('admNo', 'Admission Number (school register)', 'text', 'placeholder="Auto-generated if blank"')}
     ${input('penNo', 'PEN No.')}
     ${input('apaarId', 'APAAR ID')}
     ${input('formNo', 'Form No.')}
@@ -819,29 +914,43 @@ function reportRows() {
   if (state.reportSec) list = list.filter(s => s.section === state.reportSec);
   return list;
 }
-function reportsView() {
-  const tab = state.reportTab;
+function reportsView(params = {}) {
   const role = state.user.role;
-  const canPrint = true;
-  const tabs = `<div class="tabs"><button class="tab ${tab === 'strength' ? 'on' : ''}" data-act="report-tab" data-tab="strength">Class / Section Strength</button><button class="tab ${tab === 'list' ? 'on' : ''}" data-act="report-tab" data-tab="list">Class / Section List</button><button class="tab ${tab === 'builder' ? 'on' : ''}" data-act="report-tab" data-tab="builder">Report Builder</button><button class="tab ${tab === 'udise' ? 'on' : ''}" data-act="report-tab" data-tab="udise">UDISE Report</button></div>`;
+  const valid = role === 'manager'
+    ? ['strength', 'list', 'udise']
+    : ['strength', 'list', 'builder', 'udise', 'verification', 'photos'];
+  let tab = params.tab || state.reportTab || 'strength';
+  if (!valid.includes(tab)) tab = 'strength';
+  state.reportTab = tab;
+  const tabs = tabBar([
+    { key: 'strength', label: 'Strength' }, { key: 'list', label: 'Class List' },
+    { key: 'builder', label: 'Report Builder' }, { key: 'udise', label: 'UDISE' },
+    { key: 'verification', label: 'Verification Sheet' }, { key: 'photos', label: 'Photo Sheets' }
+  ].filter(t => valid.includes(t.key)), tab);
   let body = '';
+  let extraActions = '';
   if (tab === 'strength') {
     const rows = classRows(mainStudents());
     body = `<div class="grid g4">${kpi('Class Groups', rows.length, 'book')}${kpi('Total Students', rows.reduce((n, r) => n + r.total, 0), 'users', 'blue')}${kpi('Boys', rows.reduce((n, r) => n + r.boys, 0), 'user', 'green')}${kpi('Girls', rows.reduce((n, r) => n + r.girls, 0), 'user', 'amber')}</div>`
       + `<div class="grid g-2-1 mt"><div class="stack">${sectionCard('Class / Section Strength Report', 'Current session', `<div class="table-wrap"><table class="data"><thead><tr><th>Class</th><th>Section</th><th>Class Teacher</th><th>Total</th><th>Boys</th><th>Girls</th><th>Active</th><th>TC / Drop</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${esc(r.cls)}</b></td><td>${esc(r.sec)}</td><td>${esc(CLASS_TEACHERS[r.cls + '|' + r.sec] || 'Not assigned')}</td><td><b>${r.total}</b></td><td>${r.boys}</td><td>${r.girls}</td><td>${r.active}</td><td>${r.total - r.active}</td></tr>`).join('')}<tr style="background:#fafbff"><td><b>Total</b></td><td></td><td></td><td><b>${rows.reduce((n, r) => n + r.total, 0)}</b></td><td><b>${rows.reduce((n, r) => n + r.boys, 0)}</b></td><td><b>${rows.reduce((n, r) => n + r.girls, 0)}</b></td><td><b>${rows.reduce((n, r) => n + r.active, 0)}</b></td><td><b>${rows.reduce((n, r) => n + r.total - r.active, 0)}</b></td></tr></tbody></table></div>`, `<button class="link-btn" data-act="export-report">Export CSV</button>`)}</div><div class="stack">${sectionCard('Strength Distribution', 'Visual overview', `<div class="card-pad">${strengthBars(rows)}</div>`)}${sectionCard('Report Notes', 'Demo output', `<div class="card-pad"><p class="report-note">Strength is derived from Student Master. TC Taken and Drop Out records remain counted in class totals for historical reporting.</p><button class="btn btn-outline btn-sm" data-act="print">${ic('print', 'sm')} Print report</button></div>`)}</div></div>`;
   } else if (tab === 'list') {
     const rows = reportRows();
-    body = `<div class="card table-card"><form class="filters" data-form="report-filter"><div class="field"><label>Class</label><select name="cls">${opts(DB.masters.classes, state.reportCls, 'All classes')}</select></div><div class="field"><label>Section</label><select name="sec">${opts(DB.masters.sections, state.reportSec, 'All sections')}</select></div><button class="btn btn-primary btn-sm" type="submit">Apply</button><button class="btn btn-ghost btn-sm" type="button" data-act="reset-report">Clear</button><span class="small muted">${rows.length} students</span></form><div class="table-wrap"><table class="data"><thead><tr><th>Roll</th><th>Student</th><th>Class</th><th>Father</th><th>Mother</th><th>Mobile</th><th>Status</th><th></th></tr></thead><tbody>${rows.slice(0, 50).map(s => `<tr><td>${esc(s.rollNo)}</td><td>${studentLink(s)}</td><td>${esc(s.className)} ${esc(s.section)}</td><td>${esc(s.fatherName)}</td><td>${esc(s.motherName)}</td><td>${esc(s.mobile)}</td><td>${statusPill(s.studentStatus)}</td><td class="right"><button class="link-btn" data-act="view-student" data-id="${s.id}">View</button></td></tr>`).join('') || `<tr><td colspan="8">${emptyBox('No students for these filters')}</td></tr>`}</tbody></table></div><div class="pager"><small>Showing ${Math.min(50, rows.length)} of ${rows.length} students · export for the full list</small><div class="row"><button class="btn btn-outline btn-sm" data-act="export-report">${ic('download', 'sm')} Export CSV</button><button class="btn btn-outline btn-sm" data-act="print">${ic('print', 'sm')} Print</button></div></div></div>`;
+    body = `<div class="card table-card"><form class="filters" data-form="report-filter"><div class="field"><label>Class</label><select name="cls">${opts(DB.masters.classes, state.reportCls, 'All classes')}</select></div><div class="field"><label>Section</label><select name="sec">${opts(DB.masters.sections, state.reportSec, 'All sections')}</select></div><button class="btn btn-primary btn-sm" type="submit">Apply</button><button class="btn btn-ghost btn-sm" type="button" data-act="reset-report">Clear</button><span class="small muted">${rows.length} students</span></form><div class="table-wrap"><table class="data"><thead><tr><th>Roll</th><th>Student</th><th>Class</th><th>Father</th><th>Mother</th><th>Mobile</th><th>Status</th><th></th></tr></thead><tbody>${rows.slice(0, 50).map(s => `<tr><td>${esc(s.rollNo)}</td><td>${role === 'manager' ? `<b>${esc(s.name)}</b>` : studentLink(s)}</td><td>${esc(s.className)} ${esc(s.section)}</td><td>${esc(s.fatherName)}</td><td>${esc(s.motherName)}</td><td>${esc(s.mobile)}</td><td>${statusPill(s.studentStatus)}</td><td class="right">${role === 'manager' ? '' : `<button class="link-btn" data-act="view-student" data-id="${s.id}">View</button>`}</td></tr>`).join('') || `<tr><td colspan="8">${emptyBox('No students for these filters')}</td></tr>`}</tbody></table></div><div class="pager"><small>Showing ${Math.min(50, rows.length)} of ${rows.length} students · export for the full list</small><div class="row"><button class="btn btn-outline btn-sm" data-act="export-report">${ic('download', 'sm')} Export CSV</button><button class="btn btn-outline btn-sm" data-act="print">${ic('print', 'sm')} Print</button></div></div></div>`;
   } else if (tab === 'builder') {
     const rows = reportRows();
     const cols = REPORT_COLS.filter(c => state.reportCols.includes(c.key));
-    body = `<div class="grid g-3-1"><div class="stack">${sectionCard('Dynamic Student Report', `${rows.length} rows · choose columns`, `<div class="table-wrap"><table class="data"><thead><tr>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, 60).map(s => `<tr>${cols.map(c => `<td>${esc(s[c.key] || '—')}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${Math.max(1, cols.length)}">${emptyBox('Select at least one column')}</td></tr>`}</tbody></table></div><p class="report-note" style="padding:10px 16px 0">Showing first 60 rows. Export includes all students matching the class filter.</p>`)}</div><div class="stack">${sectionCard('Output Columns', 'Template-like column selection', `<div class="card-pad"><div class="chips">${REPORT_COLS.map(c => `<button class="chip ${state.reportCols.includes(c.key) ? 'on' : ''}" data-act="toggle-col" data-col="${c.key}">${esc(c.label)}</button>`).join('')}</div><div class="row mt"><button class="btn btn-soft btn-sm" data-act="all-cols">Select core columns</button><button class="btn btn-outline btn-sm" data-act="export-report">${ic('download', 'sm')} Export CSV</button></div></div>`)}${sectionCard('Filter', 'Apply to dynamic report', `<form class="card-pad" data-form="report-filter"><div class="field"><label>Class</label><select name="cls">${opts(DB.masters.classes, state.reportCls, 'All classes')}</select></div><div class="field mt-s"><label>Section</label><select name="sec">${opts(DB.masters.sections, state.reportSec, 'All sections')}</select></div><button class="btn btn-primary btn-sm btn-block mt-s" type="submit">Apply filters</button></form>`)}</div></div>`;
-  } else {
+    body = `<div class="grid g-3-1"><div class="stack">${sectionCard('Dynamic Student Report', `${rows.length} rows · choose columns`, `<div class="table-wrap"><table class="data"><thead><tr>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, 60).map(s => `<tr>${cols.map(c => `<td>${esc(s[c.key] || '—')}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${Math.max(1, cols.length)}">${emptyBox('Select at least one column')}</td></tr>`}</tbody></table></div><p class="report-note" style="padding:10px 16px 0">Showing first 60 rows. Export includes all students matching the class filter.</p>`)}</div><div class="stack">${sectionCard('Output Columns', 'Template-like column selection', `<div class="card-pad"><div class="chips">${REPORT_COLS.map(c => `<button class="chip ${state.reportCols.includes(c.key) ? 'on' : ''}" data-act="toggle-col" data-col="${c.key}">${esc(c.label)}</button>`).join('')}</div><div class="row mt"><button class="btn btn-soft btn-sm" data-act="all-cols">Select core columns</button><button class="btn btn-outline btn-sm" data-act="export-report">${ic('download', 'sm')} Export CSV</button></div></div>`)}${sectionCard('Filter', 'Apply to dynamic report', `<form class="card-pad" data-form="report-filter"><div class="field"><label>Class</label><select name="cls">${opts(DB.masters.classes, state.reportCls, 'All classes')}</select></div><div class="field mt-s"><label>Section</label><select name="sec">${opts(DB.masters.sections, state.reportSec, 'All sections')}</select></div><button class="btn btn-primary btn-sm btn-block mt-s" type="submit">Apply filters</button></form>`)}${sectionCard('Saved Templates', 'Reusable report output', `<div class="card-pad"><div class="list">${DB.reportTemplates.map(t => `<div class="list-item"><div><b>${esc(t.name)}</b><small>${t.cols.length} columns &middot; ${esc(t.cls || 'All classes')}</small></div><div class="r"><button class="link-btn" data-act="template-apply" data-id="${t.id}">Apply</button><button class="link-btn danger" data-act="template-del" data-id="${t.id}">Delete</button></div></div>`).join('') || '<p class="report-note">No templates saved.</p>'}</div><form class="inline-form mt-s" data-form="template-save"><input class="input" name="name" placeholder="Template name" required maxlength="40"><button class="btn btn-outline btn-sm" type="submit">${ic('plus', 'sm')} Save current</button></form></div>`)}</div></div>`;
+  } else if (tab === 'udise') {
     const rows = mainStudents();
     body = `<div class="notice"><span class="mark">i</span><div><b>UDISE-specific demo report.</b> Columns reflect common UDISE+ student parameters from the SOW. Field completeness and submission rules must be confirmed before production use.</div></div><div class="card table-card"><div class="table-head"><div><h3>UDISE Student Report</h3><p>${rows.length} student records · session ${esc(activeSchoolSession().name)}</p></div><div class="row"><button class="btn btn-outline btn-sm" data-act="export-udise">${ic('download', 'sm')} Export CSV</button><button class="btn btn-outline btn-sm" data-act="print">${ic('print', 'sm')} Print</button></div></div><div class="table-wrap"><table class="data"><thead><tr><th>Student</th><th>PEN</th><th>APAAR</th><th>Class</th><th>Gender</th><th>Category</th><th>Religion</th><th>Blood Group</th><th>RTE</th><th>Disability</th><th>Minority</th></tr></thead><tbody>${rows.slice(0, 60).map(s => `<tr><td><b>${esc(s.name)}</b><small class="muted">${esc(s.regNo)}</small></td><td>${esc(s.penNo)}</td><td>${esc(s.apaarId)}</td><td>${esc(s.className)} ${esc(s.section)}</td><td>${esc(s.gender)}</td><td>${esc(s.socialCategory)}</td><td>${esc(s.religion)}</td><td>${esc(s.bloodGroup)}</td><td>${esc(s.rte)}</td><td>${esc(s.disability)}</td><td>${esc(s.minority)}</td></tr>`).join('')}</tbody></table></div><p class="report-note" style="padding:10px 16px">Showing 60 of ${rows.length} records. CSV export includes all.</p></div>`;
+  } else {
+    const embedded = extractHead(tab === 'verification' ? verificationView() : photosView());
+    extraActions = embedded.actions;
+    body = embedded.body;
   }
-  return pageHead(role === 'manager' ? 'Summary Reports' : 'Reports & MIS', role === 'manager' ? 'Authorized summary reports. Manager report scope is provisional in this demo.' : 'Class strength, class lists, dynamic student reports and UDISE-specific output.', `<button class="btn btn-outline" data-act="export-report">${ic('download', 'sm')} Export CSV</button><button class="btn btn-primary" data-act="print">${ic('print', 'sm')} Print</button>`)
-    + printHead('MIS Report · ' + (tab === 'udise' ? 'UDISE' : tab === 'strength' ? 'Class Strength' : 'Student Report'))
+  const label = { strength: 'Class Strength', list: 'Class List', builder: 'Dynamic Report', udise: 'UDISE', verification: 'Verification Sheet', photos: 'Photo Sheets' }[tab];
+  return pageHead(role === 'manager' ? 'Summary Reports' : 'Reports & MIS', role === 'manager' ? 'Authorized summary reports. Manager report scope is provisional in this demo.' : 'Class strength, lists, dynamic reports, UDISE and print-ready verification outputs.', extraActions + `<button class="btn btn-outline" data-act="export-report">${ic('download', 'sm')} Export CSV</button><button class="btn btn-primary" data-act="print">${ic('print', 'sm')} Print</button>`)
+    + printHead('MIS Report · ' + label)
     + tabs + body;
 }
 
@@ -868,7 +977,7 @@ function photosView() {
     + `<div class="notice"><span class="mark">i</span><div><b>Demo photo upload.</b> Images are read locally with FileReader and shown in this browser only. No file is uploaded. Production naming: <b>StudentRegNo.jpg</b>.</div></div>`
     + `<div class="grid g4">${kpi('Students Listed', list.length, 'users')}${kpi('Photos Added', uploaded, 'image', 'green', 'Browser-only')}${kpi('Missing Photos', list.length - uploaded, 'file', 'amber', 'Upload to preview')}${kpi('Naming Rule', 'RegNo.jpg', 'settings', 'blue', 'Configured in SOW')}</div>`
     + `<div class="card table-card mt"><form class="filters" data-form="photo-filter"><div class="field"><label>Class</label><select name="cls">${opts(DB.masters.classes, state.photoCls, 'All classes')}</select></div><button class="btn btn-primary btn-sm" type="submit">Filter</button><button class="btn btn-ghost btn-sm" type="button" data-act="reset-photos">Clear</button><span class="small muted">Showing ${Math.min(60, list.length)} of ${list.length} students</span></form>
-      <div class="card-pad"><div class="photo-grid">${list.slice(0, 60).map(s => `<div class="photo-tile">${avatar(s)}<b title="${esc(s.name)}">${esc(s.name)}</b><small>${esc(s.regNo)}</small><label class="btn btn-outline btn-sm upload-btn">${s.photo ? 'Change' : 'Upload'}<input type="file" accept="image/*" data-photo="${s.id}" hidden></label></div>`).join('') || emptyBox('No students found')}</div></div><div class="pager"><small>Photos are stored in memory and reset when the page is reloaded.</small><span class="chip">Class / School wise</span></div></div>`;
+      <div class="card-pad"><div class="photo-grid">${list.slice(0, 60).map(s => `<div class="photo-tile">${avatar(s)}<b title="${esc(s.name)}">${esc(s.name)}</b><small>${esc(s.regNo)}</small><div class="row" style="justify-content:center;gap:6px"><label class="btn btn-outline btn-sm upload-btn">${s.photo ? 'Change' : 'Upload'}<input type="file" accept="image/*" data-photo="${s.id}" hidden></label>${s.photo ? `<button type="button" class="btn btn-ghost btn-sm" data-act="photo-dl" data-id="${s.id}" title="Download ${esc(s.regNo)}.jpg">${ic('download', 'sm')}</button>` : ''}</div></div>`).join('') || emptyBox('No students found')}</div></div><div class="pager"><small>Photos are stored in memory and reset when the page is reloaded.</small><span class="chip">Class / School wise</span></div></div>`;
 }
 
 /* ============================= documents ============================= */
@@ -888,7 +997,7 @@ function documentsView() {
   return pageHead(role === 'parent' ? 'My Child\'s Documents' : 'Document Repository', 'Admission documents, certificates and student records held in the demo repository.', `<button class="btn btn-outline" data-act="nav" data-view="students">${ic('users', 'sm')} Students</button>${role === 'admin' ? `<button class="btn btn-primary" data-act="nav" data-view="photos">Photographs</button>` : ''}`)
     + `<div class="notice"><span class="mark">i</span><div><b>Access note.</b> ${role === 'parent' ? 'Parents see documents linked only to their child.' : 'Document access is simulated. The School Office has provisional access in this demo; production permissions must be defined by the SOW owner.'}</div></div>`
     + `<div class="grid g-3-1"><div class="stack"><div class="card table-card"><form class="filters" data-form="doc-filter"><div class="field search"><label>Search</label><span>${ic('search', 'sm')}</span><input name="q" value="${esc(state.docQ)}" placeholder="Document or student"></div><div class="field"><label>Type</label><select name="type">${opts(DB.masters.documentTypes, state.docType, 'All types')}</select></div><button class="btn btn-primary btn-sm" type="submit">Apply</button><button class="btn btn-ghost btn-sm" type="button" data-act="reset-docs">Reset</button></form><div class="table-wrap"><table class="data"><thead><tr><th>Document</th><th>Type</th><th>Linked Student</th><th>Date</th><th>Size</th><th>Added By</th><th></th></tr></thead><tbody>${list.map(d => { const st = byId(d.studentId); return `<tr><td><div class="row"><span class="doc-type">${esc((d.type || 'DOC').slice(0, 3))}</span><b>${esc(d.name)}</b></div></td><td>${esc(d.type)}</td><td>${st ? esc(st.name) + `<small class="muted"> · ${esc(st.regNo)}</small>` : '—'}</td><td>${esc(fmtDate(d.date))}</td><td>${esc(d.size)}</td><td>${esc(d.by)}</td><td class="right row-actions"><button class="btn-icon icon-btn" title="Download" data-act="doc-dl" data-id="${d.id}">${ic('download', 'sm')}</button>${canDelete ? `<button class="btn-icon icon-btn" title="Archive" data-act="doc-del" data-id="${d.id}">${ic('archive', 'sm')}</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="7">${emptyBox('No documents found')}</td></tr>`}</tbody></table></div><div class="pager"><small>${list.length} document(s) in demo repository</small><span class="chip">Session ${esc(activeSchoolSession().name)}</span></div></div>
-      ${canAdd ? sectionCard('Add Document', 'Simulated upload — no file leaves the browser', `<form class="card-pad" data-form="doc-add"><div class="grid g2"><div class="field"><label for="docName">Document name</label><input id="docName" name="name" placeholder="e.g. Birth_Certificate_Student.pdf" required></div><div class="field"><label for="docType">Document type</label><select id="docType" name="type">${opts(DB.masters.documentTypes, 'Birth Certificate')}</select></div><div class="field"><label for="docStudent">Linked student</label><select id="docStudent" name="studentId"><option value="">Select student (optional)</option>${DB.students.slice(0, 60).map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.regNo)})</option>`).join('')}</select></div><div class="field"><label for="docSize">Size (demo)</label><input id="docSize" name="size" value="320 KB" maxlength="12"></div></div><div class="form-error" id="docError"></div><button class="btn btn-primary btn-sm mt-s" type="submit">${ic('plus', 'sm')} Add to repository</button><p class="hint mt-s">Demo action adds a metadata row only. No actual file is stored.</p></form>`) : ''}
+      ${canAdd ? sectionCard('Add Document', 'Upload a file into this browser session', `<form class="card-pad" data-form="doc-add"><div class="grid g2"><div class="field"><label for="docName">Document name</label><input id="docName" name="name" placeholder="e.g. Birth_Certificate_Student.pdf" required></div><div class="field"><label for="docType">Document type</label><select id="docType" name="type">${opts(DB.masters.documentTypes, 'Birth Certificate')}</select></div><div class="field"><label for="docStudent">Linked student</label><select id="docStudent" name="studentId"><option value="">Select student (optional)</option>${DB.students.slice(0, 60).map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.regNo)})</option>`).join('')}</select></div><div class="field"><label for="docFile">File</label><input id="docFile" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"></div></div><div class="form-error" id="docError"></div><button class="btn btn-primary btn-sm mt-s" type="submit">${ic('upload', 'sm')} Upload document</button><p class="hint mt-s">PDF, JPG or PNG up to 2 MB. The file is kept in browser memory for this session only.</p></form>`) : ''}
       </div><div class="stack">${sectionCard('Repository Summary', 'Access overview', `<div class="card-pad"><div class="profile-rows"><div><span>Total documents</span><b>${docs.length}</b></div><div><span>Linked students</span><b>${new Set(docs.map(d => d.studentId)).size}</b></div><div><span>File types</span><b>${new Set(docs.map(d => d.type)).size}</b></div><div><span>Access</span><b>${role === 'parent' ? 'Child only' : role === 'office' ? 'Provisional' : 'School Admin'}</b></div></div></div>`)}${sectionCard('Required Documents', 'Admission checklist (demo)', `<div class="card-pad"><div class="list">${DB.masters.documentTypes.map(t => `<div class="list-item"><div><b>${esc(t)}</b><small>${docs.filter(d => d.type === t).length} on file</small></div><div class="r">${pill(docs.some(d => d.type === t) ? 'Available' : 'Missing', docs.some(d => d.type === t) ? 'green' : 'amber')}</div></div>`).join('')}</div></div>`)}</div></div>`;
 }
 
@@ -923,15 +1032,41 @@ function userEditModal(id) {
     </form>
   </div></div>`;
 }
+function roleEditModal(id) {
+  const r = id ? DB.roles.find(x => x.id === id) : null;
+  const perms = ['View', 'Edit', 'Archive', 'Delete'];
+  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="${r ? 'Edit role' : 'Add role'}">
+    <div class="modal-head"><span class="modal-ico">${ic('shield')}</span><div><h3>${r ? 'Edit Role' : 'Add Role'}</h3><p>Configure demo role permissions. Login accounts are managed separately.</p></div></div>
+    <form class="modal-body" data-form="role-save" data-id="${r ? r.id : ''}">
+      <div class="field"><label>Role name</label><input name="name" value="${esc(r ? r.name : '')}" required maxlength="40"></div>
+      <div class="field mt-s"><label>Description</label><input name="desc" value="${esc(r ? r.desc : '')}" maxlength="120"></div>
+      <div class="field mt-s"><label>Permissions</label><div class="chips">${perms.map(p => `<label class="chip ${r && r.perms.includes(p) ? 'on' : ''}"><input type="checkbox" name="perms" value="${p}" ${r && r.perms.includes(p) ? 'checked' : ''} style="margin-right:6px">${p}</label>`).join('')}</div></div>
+      <div class="form-error" id="roleError"></div>
+      <div class="modal-foot" style="padding:16px 0 0"><button type="button" class="btn btn-outline" data-act="modal-cancel">Cancel</button><button class="btn btn-primary" type="submit">${r ? 'Save role' : 'Add role'}</button></div>
+    </form>
+  </div></div>`;
+}
+function schoolEditModal(id) {
+  const s = DB.schools.find(x => x.id === id);
+  if (!s) return;
+  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="Edit school">
+    <div class="modal-head"><span class="modal-ico">${ic('building')}</span><div><h3>Edit School</h3><p>Update branch details for this demo group.</p></div></div>
+    <form class="modal-body" data-form="school-branch-save" data-id="${s.id}">
+      <div class="grid g2"><div class="field"><label>School name</label><input name="name" value="${esc(s.name)}" required></div><div class="field"><label>Short code</label><input name="code" value="${esc(s.code)}" required maxlength="10"></div><div class="field"><label>City</label><input name="city" value="${esc(s.city)}"></div><div class="field"><label>State</label><input name="state" value="${esc(s.state)}"></div><div class="field"><label>Board</label><input name="board" value="${esc(s.board || 'CBSE')}"></div><div class="field"><label>Phone</label><input name="phone" value="${esc(s.phone || '')}"></div><div class="field"><label>Email</label><input name="email" type="email" value="${esc(s.email || '')}"></div><div class="field"><label>Status</label><select name="status"><option value="active" ${s.status === 'active' ? 'selected' : ''}>Active</option><option value="archived" ${s.status === 'archived' ? 'selected' : ''}>Archived</option></select></div><div class="field field-wide"><label>Address</label><input name="address" value="${esc(s.address || '')}"></div></div>
+      <div class="form-error" id="schoolEditError"></div>
+      <div class="modal-foot" style="padding:16px 0 0"><button type="button" class="btn btn-outline" data-act="modal-cancel">Cancel</button><button class="btn btn-primary" type="submit">Save school</button></div>
+    </form>
+  </div></div>`;
+}
 function usersView() {
   const users = DB.users;
-  const roles = ROLE_KEYS;
+  const roles = DB.roles;
   const active = users.filter(u => u.status === 'Active').length;
-  return pageHead('Users, Roles & Permissions', 'Manage demo logins, reset credentials and review role-based access. Scope and role names are configurable placeholders.', `<button class="btn btn-outline" data-act="nav" data-view="admins">${ic('shield', 'sm')} School Admins</button><button class="btn btn-primary" data-act="nav" data-view="audit">Audit Trail</button>`)
+  return pageHead('Users, Roles & Permissions', 'Manage demo logins, reset credentials and configure role permissions. Changes apply to this demo session.', `${state.user.role === 'super' ? `<button class="btn btn-outline" data-act="nav" data-view="admins">${ic('shield', 'sm')} School Admins</button>` : `<button class="btn btn-outline" data-act="role-add">${ic('plus', 'sm')} Add Role</button>`}<button class="btn btn-primary" data-act="nav" data-view="audit">Audit Trail</button>`)
     + `<div class="grid g4">${kpi('Total Users', users.length, 'users')}${kpi('Active Users', active, 'check', 'green', 'Can sign in')}${kpi('Disabled', users.length - active, 'lock', 'amber', 'Access suspended')}${kpi('Roles', roles.length, 'shield', 'blue', 'Demo role matrix')}</div>`
     + `<div class="notice mt"><span class="mark">i</span><div><b>Provisional permissions.</b> Role names and access scope are placeholders to demonstrate the SOW's role-based access requirement. End-user authorization must be confirmed before build.</div></div>`
     + `<div class="grid g-3-1 mt"><div class="stack">${sectionCard('User Accounts', `${users.length} accounts`, `<div class="table-wrap"><table class="data"><thead><tr><th>Name</th><th>Username</th><th>Mobile</th><th>Role</th><th>Last Login</th><th>Status</th><th></th></tr></thead><tbody>${users.map(u => `<tr><td><div class="user-cell"><span class="avatar sm">${esc(initials(u.name))}</span><div><b>${esc(u.name)}</b><small>${esc(u.email || u.username + '@demo.local')}</small></div></div></td><td>${esc(u.username)}</td><td>${esc(u.mobile)}</td><td>${pill(ROLES[u.role]?.label || u.role, 'violet')}</td><td>${esc(u.last || u.lastLogin || 'Never')}</td><td>${statusPill(u.status)}</td><td class="right row-actions"><button class="btn-icon icon-btn" title="Edit user" data-act="user-edit" data-id="${u.id}">${ic('edit', 'sm')}</button><button class="btn-icon icon-btn" title="Reset password" data-act="user-reset" data-id="${u.id}">${ic('key', 'sm')}</button><button class="btn-icon icon-btn ${u.status === 'Active' ? 'danger' : ''}" title="${u.status === 'Active' ? 'Disable' : 'Enable'}" data-act="user-toggle" data-id="${u.id}">${ic(u.status === 'Active' ? 'lock' : 'check', 'sm')}</button></td></tr>`).join('')}</tbody></table></div><div class="pager"><small>Reset password is simulated and displays a demo confirmation.</small><span class="chip">10 demo roles</span></div>`)}</div>
-    <div class="stack">${sectionCard('Add User', 'Demo account', `<form class="card-pad" data-form="user-add"><div class="field"><label for="uName">Full name</label><input id="uName" name="name" required></div><div class="field mt-s"><label for="uUser">Username</label><input id="uUser" name="username" required></div><div class="field mt-s"><label for="uMobile">Mobile</label><input id="uMobile" name="mobile" maxlength="10" inputmode="numeric" required></div><div class="field mt-s"><label for="uRole">Role</label><select id="uRole" name="role">${ROLE_KEYS.map(k => `<option value="${k}">${esc(ROLES[k].label)}</option>`).join('')}</select></div><div class="form-error" id="userError"></div><button class="btn btn-primary btn-block mt-s" type="submit">${ic('plus', 'sm')} Add user</button></form>`)}${sectionCard('Role Permissions', 'Screen access in this demo', `<div class="table-wrap"><table class="data compact"><thead><tr><th>Role</th><th>Screens</th><th>Restriction</th></tr></thead><tbody>${roles.map(k => `<tr><td><b>${esc(ROLES[k].label)}</b></td><td>${(NAV[k] || []).reduce((n, g) => n + g.items.length, 0)}</td><td class="small">${esc(ROLES[k].desc)}</td></tr>`).join('')}</tbody></table></div>`)}</div></div>`;
+    <div class="stack">${sectionCard('Add User', 'Demo account', `<form class="card-pad" data-form="user-add"><div class="field"><label for="uName">Full name</label><input id="uName" name="name" required></div><div class="field mt-s"><label for="uUser">Username</label><input id="uUser" name="username" required></div><div class="field mt-s"><label for="uMobile">Mobile</label><input id="uMobile" name="mobile" maxlength="10" inputmode="numeric" required></div><div class="field mt-s"><label for="uRole">Role</label><select id="uRole" name="role">${ROLE_KEYS.map(k => `<option value="${k}">${esc(ROLES[k].label)}</option>`).join('')}</select></div><div class="form-error" id="userError"></div><button class="btn btn-primary btn-block mt-s" type="submit">${ic('plus', 'sm')} Add user</button></form>`)}${sectionCard('Role Permissions', 'Editable permissions in this demo', `<div class="table-wrap"><table class="data compact"><thead><tr><th>Role</th><th>Permissions</th><th>Access</th><th></th></tr></thead><tbody>${roles.map(r => `<tr><td><b>${esc(r.name)}</b>${r.builtin ? '' : ' ' + pill('Custom', 'blue')}</td><td>${r.perms.map(p => `<span class="chip on">${esc(p)}</span>`).join(' ')}</td><td class="small">${esc(r.desc)}</td><td class="right"><button class="link-btn" data-act="role-edit" data-id="${r.id}">Edit</button></td></tr>`).join('')}</tbody></table></div><div class="card-pad" style="border-top:1px solid var(--line)"><button class="btn btn-outline btn-sm" data-act="role-add">${ic('plus', 'sm')} Add role</button></div>`)}</div></div>`;
 }
 
 /* ============================= my school ============================= */
@@ -944,9 +1079,12 @@ function schoolView() {
 }
 
 /* ============================= modules ============================= */
-function modulesView() {
+function legacyModulesView() {
   const on = MODULE_DEFS.filter(m => m.enabled).length;
-  return pageHead('School Modules', 'Enable the modules included in this demo. Module scope and subscription behaviour are illustrative; no licensing or billing is implemented.', `<button class="btn btn-outline" data-act="nav" data-view="schools">${ic('building', 'sm')} Schools</button><button class="btn btn-primary" data-act="nav" data-view="users">Users & Roles</button>`)
+  const scopeAction = state.user.role === 'super'
+    ? `<button class="btn btn-outline" data-act="nav" data-view="schools">${ic('building', 'sm')} Schools</button>`
+    : `<button class="btn btn-outline" data-act="nav" data-view="school">${ic('school', 'sm')} School Profile</button>`;
+  return pageHead('School Modules', 'Enable the modules included in this demo. Module scope and subscription behaviour are illustrative; no licensing or billing is implemented.', `${scopeAction}<button class="btn btn-primary" data-act="nav" data-view="users">Users & Roles</button>`)
     + `<div class="notice warn"><span class="mark">i</span><div><b>Provisional scope.</b> Module names and inclusion are based on the SOW and this demo. Confirm licensed modules and role-level access before implementation.</div></div>`
     + `<div class="grid g4">${kpi('Configured Modules', MODULE_DEFS.length, 'layers')}${kpi('Enabled', on, 'check', 'green', 'In this demo')}${kpi('Disabled', MODULE_DEFS.length - on, 'lock', 'amber', 'Can be turned on')}${kpi('School Scope', DB.school.code, 'school', 'blue', 'Demo tenant')}</div>`
     + `<div class="grid g-3-1 mt"><div class="stack">${sectionCard('Module Configuration', 'Institution-wide toggles', `<div class="table-wrap"><table class="data"><thead><tr><th>Module</th><th>Key</th><th>Primary Users</th><th>Status</th><th></th></tr></thead><tbody>${MODULE_DEFS.map(m => `<tr><td><b>${esc(m.name)}</b><small class="muted">${esc(m.desc)}</small></td><td><code>${esc(m.key)}</code></td><td class="small">${esc(m.roles)}</td><td>${m.enabled ? pill('Enabled', 'green') : pill('Disabled', 'grey')}</td><td class="right"><label class="switch"><input type="checkbox" data-module="${m.key}" ${m.enabled ? 'checked' : ''}><span class="track"></span></label></td></tr>`).join('')}</tbody></table></div>`)}</div>
@@ -960,14 +1098,14 @@ function schoolsView() {
   const total = DB.schools.reduce((n, s) => n + (s.students || 0), 0);
   return pageHead('Schools & Branches', 'Super Admin workspace across the demo school group. Branch-level student data is illustrative in this prototype.', `<button class="btn btn-outline" data-act="nav" data-view="modules">${ic('settings', 'sm')} Modules</button><button class="btn btn-primary" data-act="nav" data-view="admins">School Admins</button>`)
     + `<div class="grid g4">${kpi('Schools', DB.schools.length, 'building')}${kpi('Active', active, 'check', 'green', 'In demo group')}${kpi('Students (declared)', total, 'users', 'blue', 'Across branches')}${kpi('Current School', DB.school.code, 'school', 'amber', 'Demo dataset')}</div>`
-    + `<div class="grid g-3-1 mt"><div class="stack"><div class="grid g2">${DB.schools.map(s => `<div class="card school-card"><div class="school-card-head"><span class="school-tile">${esc(s.initials)}</span><div><h3>${esc(s.name)}</h3><p>${esc(s.code)} &middot; ${esc(s.city)}</p></div>${s.status === 'active' ? pill('Active', 'green') : pill('Archived', 'grey')}</div><div class="profile-rows"><div><span>Board</span><b>${esc(s.board || 'CBSE')}</b></div><div><span>Students</span><b>${s.students || 0}</b></div><div><span>Modules</span><b>${Object.values(s.modules || {}).filter(Boolean).length}</b></div><div><span>Phone</span><b class="small">${esc(s.phone)}</b></div></div><p class="small muted school-addr">${esc(s.address)}</p><div class="row between"><div class="row">${s.id === DB.school.id ? '<span class="chip on">Current demo school</span>' : ''}${s.status === 'active' ? pill('Branch', 'blue') : ''}</div><div class="row"><button class="link-btn" data-act="school-toggle" data-id="${s.id}">${s.status === 'active' ? 'Archive' : 'Activate'}</button><button class="btn btn-outline btn-sm" data-act="school-open" data-id="${s.id}">View</button></div></div></div>`).join('')}</div></div>
+    + `<div class="grid g-3-1 mt"><div class="stack"><div class="grid g2">${DB.schools.map(s => `<div class="card school-card"><div class="school-card-head"><span class="school-tile">${esc(s.initials)}</span><div><h3>${esc(s.name)}</h3><p>${esc(s.code)} &middot; ${esc(s.city)}</p></div>${s.status === 'active' ? pill('Active', 'green') : pill('Archived', 'grey')}</div><div class="profile-rows"><div><span>Board</span><b>${esc(s.board || 'CBSE')}</b></div><div><span>Students</span><b>${s.students || 0}</b></div><div><span>Modules</span><b>${Object.values(s.modules || {}).filter(Boolean).length}</b></div><div><span>Phone</span><b class="small">${esc(s.phone)}</b></div></div><p class="small muted school-addr">${esc(s.address)}</p><div class="row between"><div class="row">${s.id === DB.school.id ? '<span class="chip on">Current demo school</span>' : ''}${s.status === 'active' ? pill('Branch', 'blue') : ''}</div><div class="row"><button class="link-btn" data-act="school-toggle" data-id="${s.id}">${s.status === 'active' ? 'Archive' : 'Activate'}</button><button class="btn btn-outline btn-sm" data-act="school-edit" data-id="${s.id}">Edit</button></div></div></div>`).join('')}</div></div>
       <div class="stack">${sectionCard('Add School', 'Demo tenant', `<form class="card-pad" data-form="school-add"><div class="field"><label for="scName">School name</label><input id="scName" name="name" required></div><div class="field mt-s"><label for="scCode">Short code</label><input id="scCode" name="code" required maxlength="10" placeholder="e.g. SPS-AG"></div><div class="grid g2 mt-s"><div class="field"><label for="scCity">City</label><input id="scCity" name="city" required></div><div class="field"><label for="scState">State</label><input id="scState" name="state" value="Uttar Pradesh"></div></div><div class="field mt-s"><label for="scPhone">Phone</label><input id="scPhone" name="phone"></div><div class="form-error" id="schoolAddError"></div><button class="btn btn-primary btn-block mt-s" type="submit">${ic('plus', 'sm')} Add school</button><p class="hint mt-s">New schools are configuration-only; they do not receive demo student data.</p></form>`)}${sectionCard('Multi-school Notes', 'Scope', `<div class="card-pad"><p class="report-note">The SOW requires a Super Admin able to manage multiple schools/branches. This demo shows group-level navigation, branch configuration and admin assignment. Cross-branch student records are not generated.</p></div>`)}</div></div>`;
 }
 
 /* ============================= school admins ============================= */
 function adminsView() {
   if (state.user.role !== 'super') return pageHead('School Admins', 'Restricted screen.') + `<div class="card">${emptyBox('Access restricted', 'Only the Super Admin can manage school administrators.')}</div>`;
-  return pageHead('School Admins', 'Assign administrators to schools and manage demo access. Super Admin access remains part of the demo RBAC matrix.', `<button class="btn btn-outline" data-act="nav" data-view="schools">${ic('building', 'sm')} Schools</button><button class="btn btn-primary" data-act="nav" data-view="users">Users & Roles</button>`)
+  return pageHead('School Admins', 'Assign administrators to schools and manage demo access. Super Admin access remains part of the demo RBAC matrix.', `<button class="btn btn-outline" data-act="nav" data-view="modules">${ic('settings', 'sm')} Modules</button><button class="btn btn-primary" data-act="nav" data-view="schools">${ic('building', 'sm')} Schools</button>`)
     + `<div class="grid g4">${kpi('Admins', DB.admins.length, 'shield')}${kpi('Active', DB.admins.filter(a => a.status === 'Active').length, 'check', 'green', 'Can sign in')}${kpi('Schools Covered', new Set(DB.admins.map(a => a.schoolId)).size, 'building', 'blue', 'Demo group')}${kpi('Super Admin', DB.schools.length, 'layers', 'amber', 'All branches')}</div>`
     + `<div class="grid g-3-1 mt"><div class="stack">${sectionCard('Administrators', 'School and Super Admin assignments', `<div class="table-wrap"><table class="data"><thead><tr><th>Name</th><th>Login</th><th>School</th><th>Role</th><th>Status</th><th>Last Login</th><th></th></tr></thead><tbody>${DB.admins.map(a => `<tr><td><div class="user-cell"><span class="avatar sm">${esc(initials(a.name))}</span><div><b>${esc(a.name)}</b><small>${esc(a.email)}</small></div></div></td><td>${esc(a.username || (a.email || '').split('@')[0])}<small class="muted">${esc(a.mobile)}</small></td><td>${esc(DB.schools.find(s => s.id === a.schoolId)?.name || 'All schools')}</td><td>${pill(a.role || 'School Admin', 'violet')}</td><td>${statusPill(a.status)}</td><td>${esc(a.lastLogin || a.last || 'Never')}</td><td class="right"><button class="link-btn" data-act="admin-toggle" data-id="${a.id}">${a.status === 'Active' ? 'Disable' : 'Enable'}</button></td></tr>`).join('')}</tbody></table></div>`)}</div>
     <div class="stack">${sectionCard('Add School Admin', 'Demo credentials', `<form class="card-pad" data-form="admin-add"><div class="field"><label for="adName">Full name</label><input id="adName" name="name" required></div><div class="field mt-s"><label for="adUser">Username</label><input id="adUser" name="username" required></div><div class="field mt-s"><label for="adMobile">Mobile</label><input id="adMobile" name="mobile" maxlength="10" required></div><div class="field mt-s"><label for="adEmail">Email</label><input id="adEmail" name="email" type="email"></div><div class="field mt-s"><label for="adSchool">School</label><select id="adSchool" name="schoolId">${DB.schools.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></div><div class="field mt-s"><label for="adRole">Role</label><select id="adRole" name="role"><option>School Admin</option><option>Super Admin</option></select></div><div class="form-error" id="adminError"></div><button class="btn btn-primary btn-block mt-s" type="submit">${ic('plus', 'sm')} Add administrator</button><p class="hint mt-s">Demo only. Password and OTP are simulated with 123456.</p></form>`)}</div></div>`;
@@ -1007,17 +1145,336 @@ function profileView() {
   return pageHead('My Profile', 'Your demo account, role scope and session information.', `<button class="btn btn-outline" data-act="password">${ic('key', 'sm')} Change password</button><button class="btn btn-primary" data-act="logout">${ic('logout', 'sm')} Sign out</button>`)
     + `<div class="grid g-3-1"><div class="stack"><div class="card"><div class="profile-hero"><span class="avatar xl">${esc(initials(u.name))}</span><div><span class="eyebrow">${esc(ROLES[u.role].label)}</span><h2>${esc(u.name)}</h2><p>${esc(u.email || u.username + '@demo.local')} &middot; ${esc(u.mobile)}</p><div class="row mt-s">${pill('Active', 'green')}${pill('Demo account', 'violet')}</div></div></div></div>
       ${sectionCard('Account Details', 'Demo profile', `<div class="card-pad"><div class="profile-rows"><div><span>Username</span><b>${esc(u.username)}</b></div><div><span>Mobile</span><b>${esc(u.mobile)}</b></div><div><span>Email</span><b>${esc(u.email || 'Not set')}</b></div><div><span>Role</span><b>${esc(ROLES[u.role].label)}</b></div><div><span>School</span><b>${esc(DB.school.name)}</b></div><div><span>Session</span><b>${esc(activeSchoolSession().name)}</b></div><div><span>Last login</span><b>${esc(u.lastLogin || 'This session')}</b></div><div><span>Auth</span><b>OTP demo</b></div></div></div>`)}
-      ${u.role === 'parent' ? sectionCard('My Children', 'Linked student records', `<div class="card-pad">${mainStudents().map(s => `<div class="list-item"><span class="avatar sm">${esc(initials(s.name))}</span><div><b>${esc(s.name)}</b><small>${esc(s.className)} ${esc(s.section)} &middot; ${esc(s.regNo)}</small></div><div class="r"><button class="link-btn" data-act="view-student" data-id="${s.id}">View</button></div></div>`).join('')}</div>`) : ''}
+      ${u.role === 'parent' ? sectionCard('My Child', 'Linked student record', `<div class="card-pad">${visibleStudents().map(s => `<div class="list-item"><span class="avatar sm">${esc(initials(s.name))}</span><div><b>${esc(s.name)}</b><small>${esc(s.className)} ${esc(s.section)} &middot; ${esc(s.regNo)}</small></div><div class="r"><button class="link-btn" data-act="view-student" data-id="${s.id}">View</button></div></div>`).join('')}</div>`) : ''}
       ${isAdmin ? sectionCard('Recent Activity', 'Audit preview', `<div class="card-pad">${auditMini(5)}</div>`) : ''}
     </div><div class="stack">${sectionCard('Role Scope', 'Screens available to this role', `<div class="card-pad"><div class="chips">${navs.map(n => n.id ? `<span class="chip on">${esc(n.label)}</span>` : `<button class="chip" data-act="nav" data-view="${n.v}">${esc(n.label)}</button>`).join('')}</div><div class="divider"></div><p class="report-note">${esc(ROLES[u.role].desc)}</p></div>`)}${sectionCard('Security', 'Frontend simulation', `<div class="card-pad"><div class="list"><div class="list-item"><span class="stat-icon blue">${ic('phone', 'sm')}</span><div><b>OTP sign-in</b><small>Demo OTP 123456. No SMS is sent.</small></div></div><div class="list-item"><span class="stat-icon amber">${ic('key', 'sm')}</span><div><b>Password</b><small>Change action is simulated only.</small></div></div><div class="list-item"><span class="stat-icon green">${ic('shield', 'sm')}</span><div><b>Session</b><small>Stored in sessionStorage on this device.</small></div></div></div></div>`)}${sectionCard('Help', 'Prototype', `<div class="card-pad"><p class="report-note">This is a frontend-only prototype. Do not enter real student or staff data. Use <b>Sign out</b> to return to the role selector.</p><button class="btn btn-outline btn-sm btn-block" data-act="logout">Sign out</button></div>`)}</div></div>`;
 }
 
+/* ============================= consolidated page helpers ============================= */
+function tabBar(items, active) {
+  return `<div class="tabs page-tabs" role="tablist">${items.map(t => `<button type="button" class="tab ${t.key === active ? 'on' : ''}" data-act="page-tab" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}</div>`;
+}
+function extractHead(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const head = tpl.content.querySelector('.page-head');
+  let actions = '';
+  if (head) {
+    const act = head.querySelector('.page-actions');
+    actions = act ? act.innerHTML : '';
+    head.remove();
+  }
+  return { actions, body: tpl.innerHTML };
+}
+function summaryBar(items) {
+  return `<div class="summary-bar">${items.map(i => `<div><span>${esc(i.label)}</span><b>${esc(i.value)}</b>${i.note ? `<small>${esc(i.note)}</small>` : ''}</div>`).join('')}</div>`;
+}
+function dataTable(headers, rows, empty = 'No records') {
+  return `<div class="table-wrap"><table class="data compact"><thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}">${emptyBox(empty)}</td></tr>`}</tbody></table></div>`;
+}
+
+/* ============================= dashboard ============================= */
+function dashboardOverview() {
+  const role = state.user.role;
+  const list = visibleStudents();
+  const active = list.filter(s => s.studentStatus === 'Active').length;
+  const rows = classRows(role === 'teacher' || role === 'class_teacher' ? list : mainStudents());
+  const cur = activeSchoolSession().name;
+  const actionsFor = {
+    admin: `<button class="btn btn-outline" data-act="nav" data-view="reports">${ic('chart', 'sm')} Reports</button><button class="btn btn-primary" data-act="nav" data-view="students" data-tab="form">${ic('plus', 'sm')} Add Student</button>`,
+    teacher: `<button class="btn btn-outline" data-act="nav" data-view="reports">Reports</button><button class="btn btn-primary" data-act="nav" data-view="students">My Students</button>`,
+    class_teacher: `<button class="btn btn-outline" data-act="nav" data-view="reports" data-tab="verification">Verification Sheet</button><button class="btn btn-primary" data-act="nav" data-view="students">Class List</button>`,
+    office: `<button class="btn btn-outline" data-act="nav" data-view="students">Student Records</button><button class="btn btn-primary" data-act="nav" data-view="admission-docs">Admissions</button>`,
+    principal: `<button class="btn btn-outline" data-act="nav" data-view="reports">Reports</button><button class="btn btn-primary" data-act="nav" data-view="students">Students</button>`,
+    manager: `<button class="btn btn-primary" data-act="nav" data-view="reports">Reports</button>`,
+    parent: `<button class="btn btn-outline" data-act="nav" data-view="admission-docs" data-tab="documents">Documents</button><button class="btn btn-primary" data-act="nav" data-view="students">Child Profile</button>`,
+    student: `<button class="btn btn-primary" data-act="nav" data-view="students">My Profile</button>`,
+    staff: `<button class="btn btn-outline" data-act="nav" data-view="profile">My Profile</button>`,
+    super: `<button class="btn btn-primary" data-act="nav" data-view="school-management">School Management</button>`
+  };
+  const subtitles = {
+    admin: `School-wide students, admissions, reports and administration for ${cur}.`,
+    teacher: `Your assigned classes and student groups for ${cur}.`,
+    class_teacher: `Class ${CT_CLASS[0]}-${CT_CLASS[1]} overview for ${cur}.`,
+    office: `Student records, admissions and document access for ${cur}.`,
+    principal: `School-wide overview and reports for ${cur}.`,
+    manager: `Authorized summary reports for ${cur}.`,
+    parent: `Your child's school information for ${cur}.`,
+    student: `Your class and profile for ${cur}.`,
+    staff: `Your workspace and school notices for ${cur}.`,
+    super: `Multi-school oversight for ${cur}.`
+  };
+  const actions = actionsFor[role] || '';
+  let body = '';
+
+  if (role === 'admin') {
+    const pending = list.filter(s => s.admissionStatus !== 'Selection' && s.admissionStatus !== 'Not Selected');
+    body = summaryBar([
+      { label: 'Active students', value: active, note: `${list.length} total records` },
+      { label: 'Class groups', value: rows.length, note: 'Current session' },
+      { label: 'Admission follow-ups', value: pending.length, note: 'Awaiting update' },
+      { label: 'Documents', value: DB.docs.filter(d => !d.archived).length, note: 'In repository' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('Class strength', 'Current session', dataTable(['Class', 'Students', 'Active'], rows.slice(0, 8).map(r => [`<b>${esc(r.cls)} ${esc(r.sec)}</b>`, r.total, r.active])), `<button class="link-btn" data-act="nav" data-view="reports">Open reports</button>`)}
+      ${sectionCard('Quick actions', 'Common administrative tasks', `<div class="card-pad">${quickActions([
+        { label: 'Add Student', sub: 'New record', v: 'students', tab: 'form', icon: 'plus' },
+        { label: 'Admissions', sub: 'Track status', v: 'admission-docs', tab: 'admissions', icon: 'layers' },
+        { label: 'Promotion', sub: 'Next session', v: 'students', tab: 'promotion', icon: 'trend' },
+        { label: 'Masters', sub: 'Master data', v: 'administration', tab: 'masters', icon: 'settings' },
+        { label: 'Users & Roles', sub: 'Access control', v: 'administration', tab: 'users', icon: 'shield' },
+        { label: 'Audit Trail', sub: 'Activity log', v: 'administration', tab: 'audit', icon: 'clock' }
+      ])}</div>`)}
+    </div>` + sectionCard('Recent activity', 'Latest demo audit events', `<div class="card-pad">${auditMini(4)}</div>`, `<button class="link-btn" data-act="nav" data-view="administration" data-tab="audit">View audit trail</button>`);
+  } else if (role === 'teacher') {
+    const rows2 = STAFF_CLASSES.map(c => {
+      const n = mainStudents().filter(s => s.className === c[0] && s.section === c[1]).length;
+      return [`<b>${esc(c[0])} ${esc(c[1])}</b>`, esc(c[2]), n, esc(CLASS_TEACHERS[c[0] + '|' + c[1]] || '—'), `<button class="link-btn" data-act="class-list" data-cls="${c[0]}" data-sec="${c[1]}">View list</button>`];
+    });
+    body = summaryBar([
+      { label: 'Assigned classes', value: STAFF_CLASSES.length, note: 'Teaching groups' },
+      { label: 'Active students', value: active, note: 'Your students' },
+      { label: 'Session', value: cur, note: activeSchoolSession().start ? fmtDate(activeSchoolSession().start) : '' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('My classes', 'Assigned teaching groups', dataTable(['Class', 'Subject', 'Students', 'Class Teacher', ''], rows2))}
+      ${sectionCard('Quick actions', 'Teaching shortcuts', `<div class="card-pad">${quickActions([
+        { label: 'My Students', sub: 'View list', v: 'students', icon: 'users' },
+        { label: 'Reports', sub: 'Class strength', v: 'reports', icon: 'chart' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}</div>`)}
+    </div>`;
+  } else if (role === 'class_teacher') {
+    const classList = visibleStudents();
+    body = summaryBar([
+      { label: 'Class strength', value: classList.length, note: `${CT_CLASS[0]}-${CT_CLASS[1]}` },
+      { label: 'Boys / Girls', value: `${classList.filter(s => s.gender === 'Male').length} / ${classList.filter(s => s.gender === 'Female').length}`, note: 'Current session' },
+      { label: 'Verification', value: 'Pending', note: 'Due Friday' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('My class', 'Class 5-A students', dataTable(['Roll', 'Student', 'Status', ''], classList.slice(0, 8).map(s => [esc(s.rollNo), studentLink(s), statusPill(s.studentStatus), `<button class="link-btn" data-act="view-student" data-id="${s.id}">Open</button>`])), `<button class="link-btn" data-act="nav" data-view="students">View all</button>`)}
+      ${sectionCard('Quick actions', 'Class teacher tasks', `<div class="card-pad">${quickActions([
+        { label: 'Verification Sheet', sub: 'Print & confirm', v: 'reports', tab: 'verification', icon: 'checks' },
+        { label: 'Class List', sub: 'Student records', v: 'students', icon: 'users' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}</div>`)}
+    </div>`;
+  } else if (role === 'office') {
+    const pending = list.filter(s => s.admissionStatus !== 'Selection' && s.admissionStatus !== 'Not Selected');
+    body = summaryBar([
+      { label: 'Student records', value: list.length, note: 'Active records' },
+      { label: 'Admission follow-ups', value: pending.length, note: 'Needs status update' },
+      { label: 'Documents', value: DB.docs.filter(d => !d.archived).length, note: 'In repository' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('Pending admissions', 'Records to review', dataTable(['Applicant', 'Class', 'Status', ''], pending.slice(0, 5).map(s => [studentLink(s), `${esc(s.className)} ${esc(s.section)}`, statusPill(s.admissionStatus), `<button class="link-btn" data-act="view-student" data-id="${s.id}">Open</button>`])), `<button class="link-btn" data-act="nav" data-view="admission-docs">Open admissions</button>`)}
+      ${sectionCard('Quick actions', 'Front-office tasks', `<div class="card-pad">${quickActions([
+        { label: 'New Admission', sub: 'Add student', v: 'students', tab: 'form', icon: 'plus' },
+        { label: 'Admissions', sub: 'Pipeline', v: 'admission-docs', tab: 'admissions', icon: 'layers' },
+        { label: 'Documents', sub: 'Repository', v: 'admission-docs', tab: 'documents', icon: 'folder' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}</div>`)}
+    </div>`;
+  } else if (role === 'principal' || role === 'manager') {
+    body = summaryBar([
+      { label: 'Total strength', value: list.length, note: 'All records' },
+      { label: 'Active students', value: active, note: 'Current status' },
+      { label: 'Class groups', value: rows.length, note: 'Running groups' },
+      { label: 'New admissions', value: list.filter(s => s.admissionDate >= '2026-04-01').length, note: 'This session' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('Class / section strength', 'Current session', dataTable(['Class', 'Section', 'Students', 'Active'], rows.map(r => [`<b>${esc(r.cls)}</b>`, esc(r.sec), r.total, r.active])), `<button class="link-btn" data-act="nav" data-view="reports">Full report</button>`)}
+      ${sectionCard('Quick actions', role === 'manager' ? 'Authorized summary access' : 'School overview', `<div class="card-pad">${quickActions(role === 'manager' ? [
+        { label: 'Reports', sub: 'Summary output', v: 'reports', icon: 'chart' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ] : [
+        { label: 'Students', sub: 'Directory', v: 'students', icon: 'users' },
+        { label: 'Reports', sub: 'Strength & UDISE', v: 'reports', icon: 'chart' },
+        { label: 'Verification', sub: 'Class sheets', v: 'reports', tab: 'verification', icon: 'checks' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}</div>`)}
+    </div>`;
+  } else if (role === 'parent') {
+    const child = byId('st1');
+    body = summaryBar([
+      { label: 'Child', value: child.name, note: child.regNo },
+      { label: 'Class', value: `${child.className} ${child.section}`, note: `Roll ${child.rollNo}` },
+      { label: 'Session', value: cur, note: 'Current academic year' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('Child summary', 'Linked student record', `<div class="card-pad"><div class="kv">${kv('Date of Birth', fmtDate(child.dob))}${kv('Blood Group', child.bloodGroup)}${kv('Father', child.fatherName)}${kv('Mother', child.motherName)}${kv('House', child.house)}${kv('Class Teacher', CLASS_TEACHERS['Class 5|A'])}</div></div>`)}
+      ${sectionCard('Quick actions', 'Family access', `<div class="card-pad">${quickActions([
+        { label: 'Child Profile', sub: 'Full details', v: 'students', icon: 'id' },
+        { label: 'Documents', sub: 'Repository', v: 'admission-docs', tab: 'documents', icon: 'folder' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}</div>`)}
+    </div>`;
+  } else if (role === 'student') {
+    const me = byId('st1');
+    body = summaryBar([
+      { label: 'Class', value: `${me.className} ${me.section}`, note: cur },
+      { label: 'Roll number', value: me.rollNo, note: 'Current session' },
+      { label: 'House', value: me.house, note: 'School house' },
+      { label: 'Student ID', value: me.regNo, note: DB.school.idLabel }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('My class details', 'Academic information', `<div class="card-pad"><div class="kv">${kv('Class Teacher', CLASS_TEACHERS['Class 5|A'])}${kv('Academic Session', cur)}${kv('Class / Section', `${me.className} / ${me.section}`)}${kv('Roll Number', me.rollNo)}${kv('House', me.house)}${kv('Admission Date', fmtDate(me.admissionDate))}</div></div>`)}
+      ${sectionCard('Quick actions', 'My school', `<div class="card-pad">${quickActions([
+        { label: 'My Profile', sub: 'Full details', v: 'students', icon: 'id' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}</div>`)}
+    </div>`;
+  } else if (role === 'staff') {
+    body = summaryBar([
+      { label: 'Role', value: 'Non-teaching staff', note: 'Provisional access' },
+      { label: 'School', value: DB.school.name, note: DB.school.city },
+      { label: 'Session', value: cur, note: 'Current academic year' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('Workspace', 'Demo duties', `<div class="card-pad"><div class="timeline"><div class="tl-item on"><b>Main gate coordination</b><small>07:45 – 08:30</small><p>Support front office with morning arrival.</p></div><div class="tl-item on"><b>Transport desk</b><small>13:30 – 14:15</small><p>Confirm afternoon routes with drivers.</p></div><div class="tl-item"><b>Inventory check</b><small>15:00 – 16:00</small><p>Sports store, ground floor.</p></div></div></div>`)}
+      ${sectionCard('Quick actions', 'Your access', `<div class="card-pad">${quickActions([
+        { label: 'My Profile', sub: 'Account details', v: 'profile', icon: 'user' },
+        { label: 'Notices', sub: 'School updates', v: 'dashboard', tab: 'notices', icon: 'bell' }
+      ])}<div class="notice warn mt-s" style="margin-bottom:0"><span class="mark">i</span><div>Non-teaching staff permissions are provisional in this frontend demo.</div></div></div>`)}
+    </div>`;
+  } else {
+    const activeSchools = DB.schools.filter(s => s.status === 'active').length;
+    const totalStudents = DB.schools.reduce((n, s) => n + (s.id === 'sch1' ? mainStudents().length : s.students), 0);
+    body = summaryBar([
+      { label: 'Schools', value: DB.schools.length, note: `${activeSchools} active` },
+      { label: 'Students', value: totalStudents, note: 'Across schools' },
+      { label: 'School admins', value: DB.admins.filter(a => a.status === 'Active').length, note: 'Active accounts' },
+      { label: 'Archived schools', value: DB.schools.filter(s => s.status === 'archived').length, note: 'Removed from use' }
+    ]) + `<div class="grid g2 mt">
+      ${sectionCard('Schools', 'Under the EduNexus umbrella', dataTable(['School', 'Code', 'Students', 'Status'], DB.schools.map(s => [`<b>${esc(s.name)}</b>`, esc(s.code), s.id === 'sch1' ? mainStudents().length : s.students, s.status === 'active' ? pill('Active', 'green') : pill('Archived', 'grey')])), `<button class="link-btn" data-act="nav" data-view="school-management">Manage schools</button>`)}
+      ${sectionCard('Quick actions', 'Super Admin tasks', `<div class="card-pad">${quickActions([
+        { label: 'Schools', sub: 'Create & edit', v: 'school-management', tab: 'schools', icon: 'building' },
+        { label: 'School Admins', sub: 'Assign access', v: 'school-management', tab: 'admins', icon: 'shield' },
+        { label: 'Modules', sub: 'Per-school setup', v: 'school-management', tab: 'modules', icon: 'settings' },
+        { label: 'Audit Trail', sub: 'Activity log', v: 'school-management', tab: 'audit', icon: 'clock' }
+      ])}</div>`)}
+    </div>`;
+  }
+  return { actions, subtitle: subtitles[role] || '', body };
+}
+function dashboardView(params) {
+  const role = state.user.role;
+  const showNotices = role !== 'super';
+  const tab = params.tab === 'notices' && showNotices ? 'notices' : 'overview';
+  const tabs = showNotices ? [{ key: 'overview', label: 'Overview' }, { key: 'notices', label: 'Notices' }] : [{ key: 'overview', label: 'Overview' }];
+  if (tab === 'notices') {
+    const n = extractHead(noticesView());
+    return pageHead('Notices', `${greeting()}, ${state.user.name}. School announcements for your role.`, n.actions) + tabBar(tabs, tab) + n.body;
+  }
+  const d = dashboardOverview();
+  return pageHead('Dashboard', `${greeting()}, ${state.user.name}. ${d.subtitle}`, d.actions) + tabBar(tabs, tab) + d.body;
+}
+
+/* ============================= students page ============================= */
+function studentsPageView(params) {
+  const role = state.user.role;
+  if (role === 'parent' || role === 'student') return studentDetailView({ id: 'st1' });
+  let allowed = [];
+  if (role === 'admin') allowed = [
+    { key: 'list', label: 'Student List' }, { key: 'form', label: params.id ? 'Edit Student' : 'Add Student' },
+    { key: 'profile', label: 'Student Profile' }, { key: 'promotion', label: 'Promotion' }, { key: 'classes', label: 'Classes & Sections' }
+  ];
+  else if (role === 'office') allowed = [{ key: 'list', label: 'Student List' }, { key: 'form', label: 'New Admission' }, { key: 'profile', label: 'Student Profile' }];
+  else allowed = [{ key: 'list', label: 'Student List' }, { key: 'classes', label: 'Classes & Sections' }, { key: 'profile', label: 'Student Profile' }];
+  if (params.tab === 'form' && params.id && role !== 'admin') params = Object.assign({}, params, { tab: 'list' });
+  if (params.tab === 'promotion' && role !== 'admin') params = Object.assign({}, params, { tab: 'list' });
+  if (params.tab === 'profile' && !params.id && !['parent', 'student'].includes(role)) params = Object.assign({}, params, { tab: 'list' });
+  let tab = params.tab || 'list';
+  if (!allowed.some(t => t.key === tab)) tab = 'list';
+  if (role !== 'admin' && tab === 'form') allowed = allowed.filter(t => t.key !== 'profile');
+  let viewHtml, title, sub;
+  if (tab === 'form') {
+    viewHtml = studentFormView(params);
+    title = params.id ? 'Edit Student' : 'Add Student';
+    sub = 'Create or update a Student Master record. Use the tabs to work through each information group.';
+  } else if (tab === 'profile') {
+    viewHtml = studentDetailView(params);
+    title = 'Student Profile';
+    sub = 'Personal, academic, family, guardian, UDISE, history and document information.';
+  } else if (tab === 'promotion') {
+    viewHtml = promotionView();
+    title = 'Student Promotion';
+    sub = 'Promote students to the next class and session while preserving academic history.';
+  } else if (tab === 'classes') {
+    viewHtml = classesView();
+    title = role === 'teacher' ? 'My Classes' : role === 'class_teacher' ? 'My Class' : 'Classes & Sections';
+    sub = 'Class and section strength generated from the Student Master.';
+  } else {
+    viewHtml = studentsView();
+    title = role === 'teacher' ? 'My Students' : role === 'class_teacher' ? 'My Class' : role === 'office' ? 'Student Records' : 'Students';
+    sub = 'Search, filter and review student records. Select a student to open the full profile.';
+  }
+  const { actions, body } = extractHead(viewHtml);
+  const tabs = allowed.filter(t => t.key !== 'profile' || params.id);
+  return pageHead(title, sub, actions) + tabBar(tabs, tab) + body;
+}
+
+/* ============================= admissions & documents page ============================= */
+function admissionDocsView(params) {
+  const role = state.user.role;
+  const tabs = role === 'parent'
+    ? [{ key: 'documents', label: 'Documents' }]
+    : [{ key: 'admissions', label: 'Admissions' }, { key: 'documents', label: 'Documents' }];
+  let tab = params.tab === 'documents' ? 'documents' : 'admissions';
+  if (role === 'parent') tab = 'documents';
+  if (role === 'principal') tab = 'documents';
+  const viewHtml = tab === 'documents' ? documentsView() : admissionsView();
+  const { actions, body } = extractHead(viewHtml);
+  const title = tab === 'documents' ? 'Documents' : 'Admissions & Documents';
+  const sub = tab === 'documents'
+    ? 'Admission documents, required document checklist and the document repository.'
+    : 'Track admission status, review required documents and open the repository.';
+  return pageHead(title, sub, actions) + tabBar(tabs, tab) + body;
+}
+
+/* ============================= administration page ============================= */
+function administrationView(params) {
+  const role = state.user.role;
+  const tabs = [
+    { key: 'masters', label: 'Masters' }, { key: 'sessions', label: 'Academic Sessions' },
+    { key: 'school', label: 'School Profile' }, { key: 'users', label: 'Users & Roles' },
+    { key: 'modules', label: 'Modules' }, { key: 'audit', label: 'Audit Trail' }
+  ];
+  let tab = params.tab || 'masters';
+  if (!tabs.some(t => t.key === tab)) tab = 'masters';
+  const renderers = { masters: mastersView, sessions: sessionsView, school: schoolView, users: usersView, modules: modulesView, audit: auditView };
+  const viewHtml = (renderers[tab] || mastersView)();
+  const { actions, body } = extractHead(viewHtml);
+  return pageHead('Administration', 'Master data, sessions, school profile, users, module configuration and the restricted audit trail.', actions) + tabBar(tabs, tab) + body;
+}
+
+/* ============================= per-school modules ============================= */
+function modulesView() {
+  const isSuper = state.user.role === 'super';
+  const school = isSuper ? (DB.schools.find(s => s.id === state.moduleSchool) || DB.schools[0]) : DB.school;
+  if (isSuper) state.moduleSchool = school.id;
+  school.modules = Object.assign(allModules(), school.modules || {});
+  const on = MODULE_DEFS.filter(m => school.modules[m.key]).length;
+  const selector = isSuper ? `<form class="filters" data-form="module-school"><div class="field"><label>School</label><select name="schoolId">${DB.schools.map(s => `<option value="${s.id}" ${s.id === school.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.code)})</option>`).join('')}</select></div><button class="btn btn-primary btn-sm" type="submit">Load</button><span class="small muted">Toggle modules for this school only</span></form>` : `<div class="notice"><span class="mark">i</span><div><b>School-scoped configuration.</b> Changes apply to ${esc(school.name)} only. Super Admin can configure each school separately.</div></div>`;
+  return pageHead('School Modules', 'Enable modules per school. Module scope and subscription behaviour are illustrative; no licensing or billing is implemented.', `${isSuper ? `<button class="btn btn-outline" data-act="nav" data-view="schools">${ic('building', 'sm')} Schools</button>` : `<button class="btn btn-outline" data-act="nav" data-view="school">${ic('school', 'sm')} School Profile</button>`}<button class="btn btn-primary" data-act="nav" data-view="users">Users & Roles</button>`)
+    + `<div class="notice warn"><span class="mark">i</span><div><b>School-scoped demo configuration.</b> Modules are stored per school in browser memory. Production entitlements and licensing require confirmation.</div></div>`
+    + selector
+    + `<div class="grid g4 mt">${kpi('Configured Modules', MODULE_DEFS.length, 'layers')}${kpi('Enabled', on, 'check', 'green', school.name)}${kpi('Disabled', MODULE_DEFS.length - on, 'lock', 'amber', 'Can be turned on')}${kpi('School Scope', school.code, 'school', 'blue', 'Demo tenant')}</div>`
+    + `<div class="grid g-3-1 mt"><div class="stack">${sectionCard('Module Configuration', `Toggles for ${school.name}`, `<div class="table-wrap"><table class="data"><thead><tr><th>Module</th><th>Key</th><th>Primary Users</th><th>Status</th><th></th></tr></thead><tbody>${MODULE_DEFS.map(m => `<tr><td><b>${esc(m.name)}</b><small class="muted">${esc(m.desc)}</small></td><td><code>${esc(m.key)}</code></td><td class="small">${esc(m.roles)}</td><td>${school.modules[m.key] ? pill('Enabled', 'green') : pill('Disabled', 'grey')}</td><td class="right"><label class="switch"><input type="checkbox" data-module="${m.key}" ${school.modules[m.key] ? 'checked' : ''}><span class="track"></span></label></td></tr>`).join('')}</tbody></table></div>`)}</div>
+    <div class="stack">${sectionCard('Add Module', 'Demo configuration', `<form class="card-pad" data-form="module-add"><div class="field"><label for="modName">Module name</label><input id="modName" name="name" required maxlength="50"></div><div class="field mt-s"><label for="modDesc">Short description</label><input id="modDesc" name="desc" maxlength="80"></div><button class="btn btn-primary btn-block mt-s" type="submit">${ic('plus', 'sm')} Add module</button><p class="hint mt-s">New modules are added to the shared module list and enabled for the selected school.</p></form>`)}${sectionCard('Module Notes', '', `<div class="card-pad"><div class="list"><div class="list-item"><span class="stat-icon blue">${ic('layers', 'sm')}</span><div><b>Per-school setup</b><small>Each school stores its own enabled/disabled map.</small></div></div><div class="list-item"><span class="stat-icon amber">${ic('shield', 'sm')}</span><div><b>Entitlements</b><small>Role-level module access remains provisional.</small></div></div><div class="list-item"><span class="stat-icon green">${ic('building', 'sm')}</span><div><b>Multi-school</b><small>Super Admin can switch schools above.</small></div></div></div></div>`)}</div></div>`;
+}
+
+/* ============================= school management page (super admin) ============================= */
+function schoolManagementView(params) {
+  if (state.user.role !== 'super') return pageHead('School Management', 'Restricted screen.') + `<div class="card">${emptyBox('Access restricted', 'Only the Super Admin can manage schools.')}</div>`;
+  const tabs = [
+    { key: 'schools', label: 'Schools' }, { key: 'admins', label: 'School Admins' },
+    { key: 'modules', label: 'Module Configuration' }, { key: 'audit', label: 'Audit Trail' }
+  ];
+  let tab = params.tab || 'schools';
+  if (!tabs.some(t => t.key === tab)) tab = 'schools';
+  const renderers = { schools: schoolsView, admins: adminsView, modules: modulesView, audit: auditView };
+  const viewHtml = (renderers[tab] || schoolsView)();
+  const { actions, body } = extractHead(viewHtml);
+  return pageHead('School Management', 'Create, edit and archive schools, assign School Admins, configure modules and review the audit trail.', actions) + tabBar(tabs, tab) + body;
+}
+
 /* ============================= view registry ============================= */
 const VIEWS = {
-  dashboard: dashboardView, classes: classesView, students: studentsView, 'student-detail': studentDetailView, 'student-form': studentFormView,
-  masters: mastersView, sessions: sessionsView, promotion: promotionView, reports: reportsView, verification: verificationView,
-  photos: photosView, documents: documentsView, audit: auditView, users: usersView, school: schoolView, modules: modulesView,
-  schools: schoolsView, admins: adminsView, admissions: admissionsView, notices: noticesView, profile: profileView
+  dashboard: dashboardView, students: studentsPageView, 'admission-docs': admissionDocsView, reports: reportsView,
+  administration: administrationView, 'school-management': schoolManagementView, profile: profileView, notices: noticesView
 };
 
 /* ============================= audit + export helpers ============================= */
@@ -1056,13 +1513,23 @@ function handleClick(e) {
   switch (act) {
     case 'modal-cancel': closeModal(); break;
     case 'modal-ok': { const fn = pendingConfirm; closeModal(); if (fn) fn(); break; }
-    case 'nav': go(t.dataset.view, id ? { id } : {}); break;
+    case 'nav': go(t.dataset.view, Object.assign(id ? { id } : {}, t.dataset.tab ? { tab: t.dataset.tab } : {})); break;
+    case 'page-tab': go(state.view, Object.assign({}, state.params, { tab: t.dataset.tab })); break;
+    case 'detail-tab': state.detailTab = t.dataset.tab; render(); break;
+    case 'form-tab': {
+      const form = t.closest('form');
+      if (!form) break;
+      form.querySelectorAll('.form-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== t.dataset.tab));
+      form.querySelectorAll('[data-act="form-tab"]').forEach(b => b.classList.toggle('on', b.dataset.tab === t.dataset.tab));
+      break;
+    }
     case 'notifications': {
       if (navItems().some(i => i.v === 'notices')) go('notices');
       else toast('Notifications', `You have ${DB.notices.filter(n => n.audience.includes(state.user.role) && !n.read).length} unread demo notice(s).`, 'info');
       break;
     }
     case 'logout': confirmBox('Sign out?', 'Your demo session will be cleared and you will return to the role selector.', () => logout(), { ok: 'Sign out' }); break;
+    case 'profile': closeSidebar(); go('profile'); break;
     case 'new-student': go('student-form'); break;
     case 'edit-student': go('student-form', { id }); break;
     case 'view-student': go('student-detail', { id }); break;
@@ -1087,7 +1554,7 @@ function handleClick(e) {
       break;
     }
     case 'export-audit': downloadCsv(`audit-${todayStr()}.csv`, ['Timestamp', 'User', 'Role', 'Module', 'Action', 'Detail'], DB.audit.map(a => [a.date, a.user, a.role, a.module, a.action, a.detail])); toast('Audit exported', 'Demo audit trail downloaded as CSV.'); break;
-    case 'report-tab': state.reportTab = t.dataset.tab; render(); break;
+    case 'report-tab': go('reports', { tab: t.dataset.tab }); break;
     case 'toggle-col': {
       const k = t.dataset.col;
       state.reportCols = state.reportCols.includes(k) ? state.reportCols.filter(x => x !== k) : state.reportCols.concat(k);
@@ -1095,6 +1562,18 @@ function handleClick(e) {
       break;
     }
     case 'all-cols': state.reportCols = ['regNo', 'name', 'className', 'section', 'gender', 'fatherName', 'mobile']; render(); break;
+    case 'template-apply': {
+      const tpl = DB.reportTemplates.find(x => x.id === id); if (!tpl) break;
+      state.reportCols = tpl.cols.slice(); state.reportCls = tpl.cls || ''; state.reportSec = tpl.sec || '';
+      go('reports', { tab: 'builder' });
+      toast('Template applied', `${tpl.name} loaded into the report builder.`);
+      break;
+    }
+    case 'template-del': {
+      const tpl = DB.reportTemplates.find(x => x.id === id); if (!tpl) break;
+      confirmBox('Delete template?', `Remove "${tpl.name}" from saved report templates?`, () => { DB.reportTemplates = DB.reportTemplates.filter(x => x.id !== id); toast('Template deleted', tpl.name); render(); }, { danger: true, ok: 'Delete' });
+      break;
+    }
     case 'reset-report': state.reportCls = ''; state.reportSec = ''; render(); break;
     case 'verify-submit': confirmBox('Mark verification complete?', `Record an audit event for the ${esc(state.user.role === 'class_teacher' ? CT_CLASS.join(' ') : state.verCls + ' ' + state.verSec)} verification sheet.`, () => { logAudit('Verification Sheet', 'Marked class sheet verified', `${state.user.role === 'class_teacher' ? CT_CLASS.join(' ') : state.verCls + ' ' + state.verSec} verification recorded (demo).`); toast('Verification recorded', 'Demo audit event added.'); }); break;
     case 'master-pick': state.masterKey = t.dataset.k; state.masterQ = ''; render(); break;
@@ -1120,6 +1599,8 @@ function handleClick(e) {
       break;
     }
     case 'user-edit': userEditModal(id); break;
+    case 'role-edit': roleEditModal(id); break;
+    case 'role-add': roleEditModal(null); break;
     case 'user-reset': confirmBox('Reset demo credentials?', 'The password reset is simulated. No email or SMS is sent. Continue?', () => { logAudit('Users & Roles', 'Reset password', `Password reset simulated for ${esc(t.closest('tr')?.querySelector('b')?.textContent || 'user')}`); toast('Password reset simulated', 'Demo OTP remains 123456.'); }, { ok: 'Reset' }); break;
     case 'user-toggle': {
       const u = DB.users.find(x => x.id === id); if (!u) break;
@@ -1130,7 +1611,7 @@ function handleClick(e) {
       render();
       break;
     }
-    case 'school-edit': go('school'); break;
+    case 'school-edit': schoolEditModal(id); break;
     case 'school-open': {
       const s = DB.schools.find(x => x.id === id);
       if (s && s.id === DB.school.id) go('school');
@@ -1153,14 +1634,44 @@ function handleClick(e) {
       render();
       break;
     }
-    case 'doc-dl': { const d = DB.docs.find(x => x.id === id); toast('Demo download', d ? `${d.name} is metadata only in this prototype.` : 'Document not found.', 'info'); break; }
+    case 'doc-dl': {
+      const d = DB.docs.find(x => x.id === id);
+      if (!d) { toast('Not found', 'Document not found.', 'error'); break; }
+      const a = document.createElement('a');
+      if (d.data) { a.href = d.data; a.download = d.fileName || d.name; }
+      else {
+        const blob = new Blob([`EduNexus demo document\nName: ${d.name}\nType: ${d.type}\nStudent: ${byId(d.studentId)?.name || '—'}\nDate: ${d.date}\n\nNo binary file was attached to this demo record.`], { type: 'text/plain' });
+        a.href = URL.createObjectURL(blob); a.download = d.name.replace(/\.[^.]+$/, '') + '.txt';
+      }
+      document.body.appendChild(a); a.click(); a.remove();
+      if (!d.data) setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast('Document downloaded', d.data ? d.fileName || d.name : 'Demo metadata file downloaded.');
+      break;
+    }
     case 'doc-del': {
       const d = DB.docs.find(x => x.id === id);
       confirmBox('Archive document?', `Archive "${d.name}" from the demo repository?`, () => { d.archived = true; logAudit('Documents', 'Archived document', d.name); toast('Document archived', d.name); render(); }, { danger: true, ok: 'Archive' });
       break;
     }
     case 'view-docs': { const s = byId(id); if (s) docsModal(s); break; }
-    case 'download-photos': toast('Demo download', 'Photo archive download is simulated. Uploaded photos are browser-only previews.', 'info'); break;
+    case 'photo-dl': {
+      const s = byId(id);
+      if (!s || !s.photo) { toast('No photo', 'This student has no photograph to download.', 'error'); break; }
+      const a = document.createElement('a'); a.href = s.photo; a.download = `${s.regNo}.jpg`;
+      document.body.appendChild(a); a.click(); a.remove();
+      toast('Photo downloaded', `${s.regNo}.jpg saved.`);
+      break;
+    }
+    case 'download-photos': {
+      const list = mainStudents().filter(s => s.photo && (!state.photoCls || s.className === state.photoCls));
+      if (!list.length) { toast('No photos', 'Upload photographs before downloading.', 'error'); break; }
+      list.forEach((s, i) => setTimeout(() => {
+        const a = document.createElement('a'); a.href = s.photo; a.download = `${s.regNo}.jpg`;
+        document.body.appendChild(a); a.click(); a.remove();
+      }, i * 250));
+      toast('Download started', `${list.length} photograph(s) will download using the Student Reg No filename.`);
+      break;
+    }
     case 'notice-read': { const n = DB.notices.find(x => x.id === id); if (n) { n.read = !n.read; render(); } break; }
     case 'notice-pin': { const n = DB.notices.find(x => x.id === id); if (n) { n.pinned = !n.pinned; toast(n.pinned ? 'Notice pinned' : 'Notice unpinned', n.title); render(); } break; }
     case 'notice-del': {
@@ -1207,6 +1718,7 @@ function handleClick(e) {
 function formValue(form, name) { const el = form.querySelector(`[name="${name}"]`); return el ? String(el.value || '').trim() : ''; }
 function showFormError(id, msg) { if (!id) return toast('Check the form', msg, 'error'); const el = document.getElementById(id); if (el) { el.textContent = msg; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } else toast('Check the form', msg, 'error'); }
 function saveStudent(form) {
+  if (!roleCan('Edit')) return showFormError('formError', 'Your current role does not have Edit permission in the role matrix.');
   const data = {};
   form.querySelectorAll('[data-k]').forEach(el => { data[el.dataset.k] = el.value.trim(); });
   const required = ['name', 'gender', 'dob', 'admissionDate', 'className', 'section', 'mobile', 'address'];
@@ -1221,8 +1733,9 @@ function saveStudent(form) {
   const editId = form.dataset.id;
   const existing = editId ? byId(editId) : null;
   if (existing) {
-    const snapshot = { name: existing.name, className: existing.className, section: existing.section, mobile: existing.mobile, admissionStatus: existing.admissionStatus };
-    const changed = Object.keys(snapshot).filter(k => snapshot[k] !== data[k]);
+    const tracked = ['name', 'className', 'section', 'rollNo', 'mobile', 'email', 'address', 'pincode', 'district', 'state', 'admissionStatus', 'studentStatus', 'fatherName', 'fatherMobile', 'motherName', 'motherMobile', 'guardianName', 'guardianContact'];
+    const before = {};
+    tracked.forEach(k => { before[k] = existing[k] == null ? '' : String(existing[k]); });
     Object.assign(existing, {
       name: data.name, gender: data.gender, dob: data.dob, admissionDate: data.admissionDate, className: data.className, section: data.section,
       subSection: data.subSection, rollNo: data.rollNo || existing.rollNo, studentStatus: data.studentStatus, admissionStatus: data.admissionStatus, house: data.house,
@@ -1243,7 +1756,12 @@ function saveStudent(form) {
     const cur = (existing.enrollments || []).find(e => e.session === activeSchoolSession().name);
     if (cur) { cur.class = existing.className; cur.section = existing.section; cur.roll = existing.rollNo; }
     existing.history = existing.history || [];
-    existing.history.unshift({ date: nowStamp(), by: state.user.name, changes: changed.length ? 'Updated ' + changed.join(', ') : 'Student record reviewed and saved' });
+    const fields = tracked.filter(k => before[k] !== String(existing[k] == null ? '' : existing[k])).map(k => ({ field: k, before: before[k], after: String(existing[k] == null ? '' : existing[k]) }));
+    existing.history.unshift({
+      date: nowStamp(), by: state.user.name,
+      changes: fields.length ? `Updated ${fields.map(f => f.field).join(', ')}` : 'Student record reviewed and saved',
+      fields: fields.map(f => ({ field: f.field, before: f.before, after: f.after }))
+    });
     logAudit('Student Master', 'Edited student', `${existing.name} (${existing.regNo}) updated`);
     state.formPhoto = null;
     toast('Student updated', `${existing.name} saved. Previous values retained in change history.`);
@@ -1327,19 +1845,61 @@ function handleSubmit(e) {
       render(); break;
     }
     case 'report-filter': state.reportCls = formValue(form, 'cls'); state.reportSec = formValue(form, 'sec'); render(); break;
+    case 'template-save': {
+      const name = formValue(form, 'name'); if (!name) return;
+      DB.reportTemplates.push({ id: 'tpl' + (DB.reportTemplates.length + 1), name, cols: state.reportCols.slice(), cls: state.reportCls, sec: state.reportSec });
+      logAudit('Reports', 'Saved report template', `${name} saved with ${state.reportCols.length} columns`);
+      toast('Template saved', `${name} is available on the Report Builder tab.`);
+      render(); break;
+    }
     case 'ver-filter': state.verCls = formValue(form, 'cls'); state.verSec = formValue(form, 'sec'); render(); break;
     case 'photo-filter': state.photoCls = formValue(form, 'cls'); render(); break;
     case 'doc-filter': state.docQ = formValue(form, 'q'); state.docType = formValue(form, 'type'); render(); break;
     case 'doc-add': {
+      if (!roleCan('Edit')) return showFormError('docError', 'Your current role does not have Edit permission in the role matrix.');
       const name = formValue(form, 'name');
       if (!name) return showFormError('docError', 'Document name is required.');
-      DB.meta.docSeq = (DB.meta.docSeq || DB.docs.length) + 1;
-      DB.docs.unshift({ id: 'd' + DB.meta.docSeq, name, type: formValue(form, 'type') || 'Other', studentId: formValue(form, 'studentId'), date: todayStr(), size: formValue(form, 'size') || '320 KB', by: state.user.name, archived: false });
-      logAudit('Documents', 'Added document', `${name} added to demo repository`);
-      toast('Document added', `${name} added as metadata only.`);
-      render(); break;
+      const file = form.elements.file && form.elements.file.files ? form.elements.file.files[0] : null;
+      if (file && file.size > 2 * 1024 * 1024) return showFormError('docError', 'File is larger than the 2 MB demo limit.');
+      const add = data => {
+        DB.meta.docSeq = (DB.meta.docSeq || DB.docs.length) + 1;
+        DB.docs.unshift({
+          id: 'd' + DB.meta.docSeq, name, type: formValue(form, 'type') || 'Other',
+          studentId: formValue(form, 'studentId'), date: todayStr(),
+          size: file ? (file.size > 1024 * 1024 ? (file.size / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(file.size / 1024)) + ' KB') : 'Metadata only',
+          by: state.user.name, archived: false, data: data || '', fileName: file ? file.name : ''
+        });
+        logAudit('Documents', 'Uploaded document', `${name}${file ? ' (' + file.name + ')' : ''} added to repository`);
+        toast('Document added', file ? `${file.name} stored in this browser session.` : `${name} added as metadata only.`);
+        render();
+      };
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => add(reader.result);
+        reader.onerror = () => showFormError('docError', 'The file could not be read. Try another file.');
+        reader.readAsDataURL(file);
+      } else add('');
+      break;
     }
     case 'audit-filter': state.auditQ = formValue(form, 'q'); state.auditModule = formValue(form, 'module'); render(); break;
+    case 'role-save': {
+      const id = form.dataset.id;
+      const name = formValue(form, 'name'), desc = formValue(form, 'desc') || 'Custom demo role';
+      const perms = $$('input[name="perms"]:checked', form).map(x => x.value);
+      if (!name) return showFormError('roleError', 'Role name is required.');
+      if (!perms.length) return showFormError('roleError', 'Select at least one permission.');
+      if (id) {
+        const r = DB.roles.find(x => x.id === id); if (!r) return closeModal();
+        Object.assign(r, { name, desc, perms });
+        logAudit('Users & Roles', 'Updated role', `${name} permissions: ${perms.join(', ')}`);
+        toast('Role updated', `${name} permissions saved for this session.`);
+      } else {
+        DB.roles.push({ id: 'r' + (DB.roles.length + 1), key: 'custom' + (DB.roles.length + 1), name, desc, perms, builtin: false });
+        logAudit('Users & Roles', 'Created role', `${name} created with ${perms.join(', ')}`);
+        toast('Role added', `${name} is available in the demo role list.`);
+      }
+      closeModal(); render(); break;
+    }
     case 'user-add': {
       const name = formValue(form, 'name'), username = formValue(form, 'username'), mobile = formValue(form, 'mobile'), role = formValue(form, 'role');
       if (!/^[6-9]\d{9}$/.test(mobile)) return showFormError('userError', 'Enter a valid 10-digit mobile number.');
@@ -1359,19 +1919,36 @@ function handleSubmit(e) {
       logAudit('Users & Roles', 'Edited user', `${u.name} (${u.username}) updated`);
       closeModal(); toast('User updated', `${u.name} saved.`); render(); break;
     }
+    case 'school-branch-save': {
+      const s = DB.schools.find(x => x.id === form.dataset.id); if (!s) return closeModal();
+      const code = formValue(form, 'code').toUpperCase();
+      if (DB.schools.some(x => x.id !== s.id && x.code === code)) return showFormError('schoolEditError', 'That school code is already in use.');
+      Object.assign(s, {
+        name: formValue(form, 'name'), code, city: formValue(form, 'city'), state: formValue(form, 'state'),
+        board: formValue(form, 'board'), phone: formValue(form, 'phone'), email: formValue(form, 'email'),
+        address: formValue(form, 'address'), status: formValue(form, 'status') || 'active'
+      });
+      s.initials = s.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      if (s.id === DB.school.id) ['name', 'code', 'city', 'state', 'board', 'phone', 'email', 'address', 'initials'].forEach(k => { DB.school[k] = s[k]; });
+      logAudit('Schools', 'Edited school', `${s.name} (${s.code}) updated`);
+      closeModal(); toast('School updated', `${s.name} saved for this session.`); render(); break;
+    }
     case 'school-save': {
       ['name', 'idLabel', 'board', 'affiliation', 'phone', 'email', 'principal', 'established', 'address'].forEach(k => { DB.school[k] = formValue(form, k); });
       logAudit('School Information', 'Updated school profile', `${DB.school.name} profile updated`);
       toast('School saved', 'School profile updated for this browser session.');
       render(); break;
     }
+    case 'module-school': state.moduleSchool = formValue(form, 'schoolId'); render(); break;
     case 'module-add': {
       const name = formValue(form, 'name');
       if (!name) return;
       const key = name.replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase()).replace(/^./, c => c.toLowerCase());
       if (MODULE_DEFS.some(m => m.key === key)) return showFormError('', 'A module with a similar key already exists.');
       MODULE_DEFS.push({ 0: key, 1: name, key, name, desc: formValue(form, 'desc') || 'Custom demo module', roles: 'Demo', enabled: true });
-      logAudit('Modules', 'Added module', `${name} added to module configuration`);
+      DB.schools.forEach(s => { s.modules = Object.assign(allModules(), s.modules || {}); s.modules[key] = true; });
+      if (DB.school && !DB.school.modules[key]) DB.school.modules[key] = true;
+      logAudit('Modules', 'Added module', `${name} added and enabled for schools`);
       toast('Module added', `${name} appears in the configuration list.`);
       render(); break;
     }
@@ -1439,10 +2016,14 @@ function handleChange(e) {
   }
   if (t.dataset && t.dataset.module) {
     const m = MODULE_DEFS.find(x => x.key === t.dataset.module);
-    if (m) {
-      m.enabled = t.checked;
-      logAudit('Modules', t.checked ? 'Enabled module' : 'Disabled module', `${m.name} ${t.checked ? 'enabled' : 'disabled'}`);
-      toast('Module updated', `${m.name} is now ${t.checked ? 'enabled' : 'disabled'}.`);
+    const isSuper = state.user.role === 'super';
+    const school = isSuper ? (DB.schools.find(s => s.id === state.moduleSchool) || DB.schools[0]) : DB.school;
+    if (m && school) {
+      school.modules = Object.assign(allModules(), school.modules || {});
+      school.modules[m.key] = t.checked;
+      if (school.id === DB.school.id) m.enabled = t.checked;
+      logAudit('Modules', t.checked ? 'Enabled module' : 'Disabled module', `${m.name} ${t.checked ? 'enabled' : 'disabled'} for ${school.name}`);
+      toast('Module updated', `${m.name} is now ${t.checked ? 'enabled' : 'disabled'} for ${school.name}.`);
       render();
     }
   }

@@ -110,7 +110,7 @@
     <div class="side-school" id="sideSchool"></div>
     <nav class="nav" id="sideNav" aria-label="Main navigation"></nav>
     <div class="side-foot">
-      <div class="side-user" id="sideUser"></div>
+      <div class="side-user" id="sideUser" data-act="profile" role="button" tabindex="0" title="Open my profile"></div>
       <button class="btn btn-ghost btn-block" data-act="logout">Logout</button>
       <p class="side-note">Prototype v1.0 &middot; simulated data</p>
     </div>
@@ -125,8 +125,8 @@
       </div>
       <div class="top-right">
         <span class="session-chip" id="sessionChip"></span>
-        <button class="icon-btn" data-act="notifications" title="Notifications" aria-label="Notifications"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>
-        <div class="top-user" id="topUser"></div>
+        <button class="icon-btn" data-act="nav" data-view="dashboard" data-tab="notices" title="Notices" aria-label="Notices"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>
+        <div class="top-user" id="topUser" data-act="profile" role="button" tabindex="0" title="Open my profile"></div>
         <button class="btn btn-outline btn-sm" data-act="logout">Logout</button>
       </div>
     </header>
