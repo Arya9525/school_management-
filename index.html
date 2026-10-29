@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EduNexus | School Management Portal</title>
+<meta name="description" content="Frontend-only School Management System demo with role-based dashboards, Student Master, MIS reports and audit trail." />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div class="login-screen" id="loginScreen">
+  <section class="login-hero">
+    <div class="hero-glow g1"></div><div class="hero-glow g2"></div>
+    <div class="hero-brand">
+      <span class="brand-mark lg">E</span>
+      <span><b>EduNexus</b><small>School Management Portal</small></span>
+    </div>
+    <div class="hero-copy">
+      <span class="hero-pill">Multi-school &middot; Role-based &middot; SOW prototype</span>
+      <h1>One portal for<br><em>every school role.</em></h1>
+      <p>A connected administration experience for teachers, staff, leadership, parents and students &mdash; built around the Student Master and school MIS.</p>
+      <ul class="hero-list">
+        <li><span class="tick">&#10003;</span> 10 role-specific dashboards</li>
+        <li><span class="tick">&#10003;</span> Student Master, admission &amp; promotion flows</li>
+        <li><span class="tick">&#10003;</span> Strength, verification, UDISE &amp; audit screens</li>
+      </ul>
+    </div>
+    <div class="hero-foot">
+      <div class="hero-stat"><b>10</b><span>Demo roles</span></div>
+      <div class="hero-stat"><b>164</b><span>Dummy students</span></div>
+      <div class="hero-stat"><b>28</b><span>MIS fields</span></div>
+    </div>
+  </section>
+
+  <section class="login-pane">
+    <div class="login-box">
+      <div class="login-head">
+        <span class="eyebrow">SECURE SIGN IN &middot; DEMO</span>
+        <h2>Welcome back</h2>
+        <p>Select your role, enter the demo username or mobile number, then verify the demo OTP.</p>
+      </div>
+
+      <div class="stepper">
+        <span class="step active" id="stepOneDot"><i>1</i> Identity</span>
+        <span class="step-line"></span>
+        <span class="step" id="stepTwoDot"><i>2</i> OTP</span>
+      </div>
+
+      <form id="loginForm" autocomplete="off" novalidate>
+        <div id="loginStepOne">
+          <label class="field-label">Choose your role</label>
+          <div class="role-grid" id="roleGrid" role="radiogroup" aria-label="Select user role"></div>
+          <div class="field">
+            <label for="loginId">Username or mobile number</label>
+            <input id="loginId" name="loginId" placeholder="e.g. priya.nair or 9810000001" autocomplete="username" />
+            <small id="loginIdHint">Select a role to see its demo credential.</small>
+          </div>
+          <p class="form-error" id="loginError" role="alert"></p>
+          <button class="btn btn-primary btn-block" type="submit" id="sendOtpBtn">Send demo OTP</button>
+        </div>
+
+        <div id="loginStepTwo" class="hidden">
+          <div class="otp-target">
+            <span class="avatar">OTP</span>
+            <div><small>Demo OTP sent to</small><b id="otpTarget">demo user</b></div>
+            <button type="button" class="link-btn" id="changeUserBtn">Change</button>
+          </div>
+          <div class="field">
+            <label for="otpInput">Enter 6-digit demo OTP</label>
+            <input id="otpInput" class="otp-input" inputmode="numeric" maxlength="6" placeholder="000000" aria-describedby="otpHelp" />
+            <small id="otpHelp">Demo OTP for every role: <b>123456</b>. This is a frontend simulation.</small>
+          </div>
+          <p class="form-error" id="otpError" role="alert"></p>
+          <button class="btn btn-primary btn-block" type="submit">Verify &amp; Login</button>
+          <div class="otp-actions">
+            <button type="button" class="link-btn" id="fillOtpBtn">Fill demo OTP</button>
+            <button type="button" class="link-btn" id="resendBtn">Resend OTP</button>
+          </div>
+        </div>
+      </form>
+
+      <details class="demo-panel" open>
+        <summary><span>Demo credentials for all 10 roles</span><span class="chev">&#9662;</span></summary>
+        <div class="demo-body">
+          <p class="demo-note"><b>Simulation only.</b> Select a role, use its username or mobile, send OTP, enter <code>123456</code>. No real authentication, OTP or data storage is involved.</p>
+          <div class="demo-scroll">
+            <table class="demo-table">
+              <thead><tr><th>Role</th><th>Username</th><th>Mobile</th><th></th></tr></thead>
+              <tbody id="demoRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <p class="login-legal">Frontend-only demonstration &middot; Fictional data &middot; Not production-secure</p>
+    </div>
+  </section>
+</div>
+
+<!-- ================= APP ================= -->
+<div class="app hidden" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="side-brand">
+      <span class="brand-mark">E</span>
+      <span><b>EduNexus</b><small>School Management</small></span>
+      <button class="icon-btn side-close" id="sidebarClose" aria-label="Close menu">&#10005;</button>
+    </div>
+    <div class="side-school" id="sideSchool"></div>
+    <nav class="nav" id="sideNav" aria-label="Main navigation"></nav>
+    <div class="side-foot">
+      <div class="side-user" id="sideUser"></div>
+      <button class="btn btn-ghost btn-block" data-act="logout">Logout</button>
+      <p class="side-note">Prototype v1.0 &middot; simulated data</p>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="top-left">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open menu">&#9776;</button>
+        <div class="crumb" id="crumb"></div>
+      </div>
+      <div class="top-right">
+        <span class="session-chip" id="sessionChip"></span>
+        <button class="icon-btn" data-act="notifications" title="Notifications" aria-label="Notifications"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></button>
+        <div class="top-user" id="topUser"></div>
+        <button class="btn btn-outline btn-sm" data-act="logout">Logout</button>
+      </div>
+    </header>
+    <main class="view" id="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span class="toast-mark" id="toastMark">&#10003;</span>
+  <div><b id="toastTitle">Saved</b><small id="toastMsg">Demo action completed.</small></div>
+  <button aria-label="Dismiss" id="toastClose">&#10005;</button>
+</div>
+<div class="modal-root" id="modalRoot"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
